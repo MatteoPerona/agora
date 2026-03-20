@@ -1,0 +1,10 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.playwright-cli/
+frontend/node_modules/
+frontend/dist/
+backend/data/agora.sqlite3
+backend/data/uploads/
+output/playwright/

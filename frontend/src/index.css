@@ -1,0 +1,89 @@
+:root {
+  --page: #f4efe7;
+  --page-deep: #e6dac8;
+  --surface: rgba(255, 251, 247, 0.88);
+  --border: rgba(96, 76, 54, 0.12);
+  --border-strong: rgba(96, 76, 54, 0.2);
+  --ink: #1c1813;
+  --ink-soft: #544a3f;
+  --ink-muted: #7a6d61;
+  --display: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+  --sans: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --mono: 'SFMono-Regular', 'JetBrains Mono', ui-monospace, monospace;
+
+  font-family: var(--sans);
+  line-height: 1.55;
+  font-weight: 400;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.78), transparent 32%),
+    linear-gradient(180deg, var(--page), var(--page-deep));
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.82), transparent 28%),
+    linear-gradient(180deg, var(--page), var(--page-deep));
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: var(--display);
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+h1 {
+  font-size: clamp(3rem, 6vw, 5rem);
+  line-height: 0.96;
+}
+
+h2 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+}
+
+h3 {
+  font-size: 1.12rem;
+}
+
+h4 {
+  font-size: 1rem;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}

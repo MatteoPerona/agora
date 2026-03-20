@@ -1,0 +1,11 @@
+{
+  "sessions_count": 9,
+  "most_engaged_tags": ["finance", "strategy", "product"],
+  "least_engaged_tags": ["operations", "psychology", "people"],
+  "personas_favorited": ["ruthless-vc", "first-principles-engineer", "ship-it-pm"],
+  "ignored_perspective_types": ["operational risk", "user psychology", "team trust"],
+  "override_frequency": 0.28,
+  "avg_rounds_before_ending": 4.7,
+  "position_change_rate": 0.41
+}
+
