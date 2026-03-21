@@ -5,32 +5,59 @@ A first local MVP of the proposal in `/Users/matteoperona/Downloads/perspective_
 ## Stack
 
 - Frontend: React + TypeScript + Vite
-- Backend: FastAPI + SQLite
-- Data: Seeded persona library and seeded reasoning profile
+- Backend: FastAPI + SQLAlchemy + Alembic
+- Simulation runtime: CAMEL-AI OASIS
+- Data: SQLite app DB, per-simulation OASIS trace DBs, seeded persona library, seeded reasoning profile
 
 ## Run locally
 
-1. Create a Python environment and install backend dependencies:
+1. Create a Python 3.11 environment and install backend dependencies:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt
+uv venv --python python3.11 .venv
+source .venv/bin/activate
+uv pip install -r backend/requirements.txt
 ```
 
-2. Optional but recommended for real LLM-backed persona preselection:
+2. Configure the simulation provider.
+
+For a local smoke test with deterministic stub responses:
 
 ```bash
-export ANTHROPIC_API_KEY=your_key_here
-# Optional override; defaults to claude-3-5-sonnet-latest
-export ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+export SIM_PROVIDER=stub
+export SIM_MODEL=stub
 ```
 
-If `ANTHROPIC_API_KEY` is not set, the app still runs and transparently falls back to the local persona recommender.
+For a real OASIS-backed run against an OpenAI-compatible endpoint:
+
+```bash
+export SIM_PROVIDER=openai-compatible-model
+export SIM_MODEL=your_model_name
+export SIM_API_KEY=your_key_here
+export SIM_BASE_URL=https://your-endpoint.example/v1
+```
+
+For Anthropic-backed runs:
+
+```bash
+export SIM_PROVIDER=anthropic
+export SIM_MODEL=claude-3-5-sonnet-latest
+export SIM_API_KEY=your_key_here
+```
+
+Optional overrides for separate planner/brief models:
+
+```bash
+export SIM_SELECTOR_MODEL=your_selector_model
+export SIM_SUMMARY_MODEL=your_summary_model
+export SIM_MAX_CONCURRENCY=8
+```
 
 3. Start the backend:
 
 ```bash
-.venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+source .venv/bin/activate
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 4. Start the frontend in a second terminal:
@@ -43,11 +70,16 @@ npm run dev
 
 5. Open the Vite URL, usually `http://127.0.0.1:5173`.
 
-## What this MVP includes
+## What this backend now includes
 
 - Route-based 3-screen flow for compose, persona selection, and simulation
 - Real document upload for `.txt`, `.md`, and `.pdf`
-- Anthropic-backed persona preselection with a local fallback
-- Dedicated simulation workspace with interaction graph, opinion chart, and transcript
+- Provider-backed panel recommendation with deterministic fallback
+- OASIS-backed panel simulation with persisted rounds, events, and per-run trace databases
+- Structured stance interviews and trajectory tracking per round
 - Expandable and downloadable decision brief
-- Separate utility routes for library management and reasoning profile
+- Additive SSE event endpoint at `/api/sessions/{id}/events`
+
+## Backend Docs
+
+For a detailed architecture walkthrough of the backend, including data flow, OASIS integration, persistence, API contracts, frontend coupling, and Mermaid diagrams, see [backend/README.md](/Users/matteoperona/Projects/agora/backend/README.md).

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -61,6 +61,7 @@ class UploadedDocument(BaseModel):
 class StoredDocument(UploadedDocument):
     storage_path: str
     extracted_text: str
+    chunks: list[str] = Field(default_factory=list)
 
 
 class PersonaStance(BaseModel):
@@ -84,7 +85,7 @@ class PanelRecommendationResponse(BaseModel):
     blind_spot_message: str
     recommendations: list[PanelRecommendation]
     suggested_ids: list[str]
-    selection_source: Literal["anthropic", "fallback"] = "fallback"
+    selection_source: Literal["provider", "fallback", "stub"] = "fallback"
     selection_notice: str | None = None
 
 
@@ -182,3 +183,39 @@ class SessionSnapshot(BaseModel):
     trajectories: list[TrajectorySeries]
     network_edges: list[NetworkEdge]
     brief: DecisionBrief | None = None
+
+
+class SessionEvent(BaseModel):
+    id: int
+    event_type: str
+    round_index: int | None
+    payload: dict[str, Any]
+    created_at: str
+
+
+class ContributionPayload(BaseModel):
+    message: str = Field(min_length=1)
+    stance: float = Field(ge=-1.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str = Field(min_length=1)
+
+
+class StanceInterviewPayload(BaseModel):
+    stance: float = Field(ge=-1.0, le=1.0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str = Field(min_length=1)
+
+
+class PanelPlannerPayload(BaseModel):
+    recommended_ids: list[str]
+    rationales: dict[str, list[str]]
+    blind_spot_message: str
+
+
+class DecisionBriefPayload(BaseModel):
+    headline: str
+    landscape_summary: str
+    strongest_arguments: list[ArgumentHighlight]
+    key_uncertainties: list[str]
+    blind_spots: list[str]
+    suggested_next_steps: list[str]

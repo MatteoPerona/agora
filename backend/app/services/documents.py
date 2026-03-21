@@ -8,14 +8,17 @@ from uuid import uuid4
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfReader
 
-from ..db import UPLOADS_DIR, create_document
+from ..config import Settings
 from ..models import StoredDocument
+from ..repository import AppRepository
 
 ALLOWED_EXTENSIONS = {".txt", ".md", ".pdf"}
 MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 150
 
 
-async def ingest_upload(file: UploadFile) -> StoredDocument:
+async def ingest_upload(repository: AppRepository, settings: Settings, file: UploadFile) -> StoredDocument:
     filename = Path(file.filename or "document").name
     extension = Path(filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
@@ -40,10 +43,11 @@ async def ingest_upload(file: UploadFile) -> StoredDocument:
         )
 
     document_id = str(uuid4())
-    storage_path = UPLOADS_DIR / f"{document_id}{extension}"
+    storage_path = settings.uploads_dir / f"{document_id}{extension}"
     storage_path.write_bytes(payload)
+    chunks = chunk_document_text(normalized_text)
 
-    return create_document(
+    return repository.create_document(
         document_id=document_id,
         filename=filename,
         mime_type=file.content_type or _mime_type_for_extension(extension),
@@ -53,18 +57,49 @@ async def ingest_upload(file: UploadFile) -> StoredDocument:
         extracted_char_count=len(normalized_text),
         extracted_text=normalized_text,
         storage_path=str(storage_path),
+        chunks=chunks,
     )
 
 
-def build_document_context(documents: list[StoredDocument]) -> str:
+def chunk_document_text(text: str) -> list[str]:
+    if len(text) <= CHUNK_SIZE:
+        return [text]
+
+    chunks: list[str] = []
+    start = 0
+    while start < len(text):
+        end = min(len(text), start + CHUNK_SIZE)
+        chunks.append(text[start:end].strip())
+        if end == len(text):
+            break
+        start = max(end - CHUNK_OVERLAP, start + 1)
+    return [chunk for chunk in chunks if chunk]
+
+
+def build_document_context(documents: list[StoredDocument], limit: int = 4) -> str:
     if not documents:
         return ""
 
     snippets: list[str] = []
+    for document in documents[:limit]:
+        for chunk in document.chunks[:2]:
+            snippets.append(f"[Document: {document.filename}]\n{chunk}")
+    return "\n\n".join(snippets[:limit])
+
+
+def select_relevant_document_chunks(documents: list[StoredDocument], query: str, limit: int = 4) -> list[str]:
+    query_tokens = set(re.findall(r"[a-z0-9-]+", query.lower()))
+    scored: list[tuple[int, str]] = []
     for document in documents:
-        excerpt = document.extracted_text[:1800].strip()
-        snippets.append(f"[Document: {document.filename}]\n{excerpt}")
-    return "\n\n".join(snippets)
+        for chunk in document.chunks:
+            tokens = set(re.findall(r"[a-z0-9-]+", chunk.lower()))
+            overlap = len(tokens & query_tokens)
+            scored.append((overlap, f"[Document: {document.filename}]\n{chunk}"))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    selected = [chunk for score, chunk in scored[:limit] if score > 0]
+    if selected:
+        return selected
+    return [f"[Document: {document.filename}]\n{document.chunks[0]}" for document in documents[:limit] if document.chunks]
 
 
 def _extract_text(filename: str, extension: str, payload: bytes) -> str:
@@ -92,4 +127,3 @@ def _mime_type_for_extension(extension: str) -> str:
     if extension == ".md":
         return "text/markdown"
     return "text/plain"
-
