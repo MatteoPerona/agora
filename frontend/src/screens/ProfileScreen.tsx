@@ -34,17 +34,28 @@ export function ProfileScreen() {
       <article className="screen-panel primary-panel">
         <div className="section-copy">
           <p className="eyebrow">Profile</p>
-          <h2>Reasoning tendencies and blind spots</h2>
+          <h2>Reasoning profile</h2>
           <p className="screen-summary">
-            The profile view now lives outside the primary flow so the main journey stays centered on the current
-            decision, while this screen remains available as a reference and future tuning surface.
+            A compact reference for how you tend to think, where you are strong, and which perspectives deserve more
+            pressure before a decision is finalized.
           </p>
         </div>
 
         {error ? <p className="inline-error">{error}</p> : null}
-        {profile ? <ProfileCard profile={profile} /> : <p className="supporting-copy">Loading profile…</p>}
+        {profile ? (
+          <div className="stack">
+            <article className="mini-card">
+              <p className="eyebrow">Reference note</p>
+              <p className="supporting-copy">
+                Use this view to calibrate panel selection and to spot the defaults you may be overusing in a debate.
+              </p>
+            </article>
+            <ProfileCard profile={profile} />
+          </div>
+        ) : (
+          <p className="supporting-copy">Loading profile…</p>
+        )}
       </article>
     </section>
   )
 }
-

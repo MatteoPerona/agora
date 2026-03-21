@@ -23,7 +23,7 @@ export function PersonaCard({
 }: PersonaCardProps) {
   return (
     <article className={`persona-card ${selected ? 'selected' : ''} ${compact ? 'compact' : ''}`}>
-      <div className="persona-topline">
+      <header className="persona-topline">
         <div className="persona-nameplate">
           <span className="persona-avatar" aria-hidden="true">
             {persona.avatar_emoji}
@@ -38,18 +38,28 @@ export function PersonaCard({
             {selected ? 'Remove' : 'Add'}
           </button>
         ) : null}
-      </div>
+      </header>
 
       <p className="persona-summary">{persona.summary}</p>
 
-      {stance ? (
-        <div className="stance-chip-row">
-          <span className={`stance-pill stance-${stance.label}`}>{stance.label}</span>
-          <span className="metric-pill">confidence {formatPercent(stance.confidence)}</span>
-        </div>
-      ) : null}
+      <div className="persona-status-strip">
+        {stance ? (
+          <div className="stance-chip-row">
+            <span className={`stance-pill stance-${stance.label}`}>{stance.label}</span>
+            <span className="metric-pill">confidence {formatPercent(stance.confidence)}</span>
+          </div>
+        ) : null}
 
-      {stance ? <p className="supporting-copy">{stance.rationale}</p> : null}
+        <div className="tag-row">
+          {persona.tags.map((tag) => (
+            <span key={tag} className="tag">
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {stance ? <p className="supporting-copy persona-rationale">{stance.rationale}</p> : null}
 
       {reasons?.length ? (
         <ul className="reason-list">
@@ -59,17 +69,9 @@ export function PersonaCard({
         </ul>
       ) : null}
 
-      <div className="tag-row">
-        {persona.tags.map((tag) => (
-          <span key={tag} className="tag">
-            {tag}
-          </span>
-        ))}
-      </div>
-
       {!compact ? (
         <details className="persona-details">
-          <summary>Open persona sheet</summary>
+          <summary>Inspect persona sheet</summary>
           <div className="persona-sheet">
             <p>
               <strong>Identity</strong>

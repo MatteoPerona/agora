@@ -18,36 +18,44 @@ export function AppShell() {
     <div className="app-shell">
       <header className="site-header">
         <div className="site-brand">
-          <p className="eyebrow">Perspective Engine</p>
-          <h1>Deliberation, one phase at a time.</h1>
+          <div className="site-label-row">
+            <p className="eyebrow">Perspective Engine</p>
+            <span className="site-badge">Modern debate workspace</span>
+          </div>
+          <h1>Structured deliberation without the UI noise.</h1>
           <p className="site-summary">
-            A calmer flow for framing the decision, choosing the right panel, and watching perspectives collide in a
-            dedicated simulation workspace.
+            Frame the decision, assemble a panel, and track how the room moves in a cleaner three-step workspace.
           </p>
         </div>
 
         <div className="site-nav-block">
-          <nav className="flow-nav" aria-label="Primary flow">
-            {FLOW_LINKS.map((link) => {
-              const active =
-                link.to === '/simulation'
-                  ? location.pathname.startsWith('/simulation')
-                  : location.pathname === link.to
-              return (
-                <NavLink key={link.to} to={link.to} className={`flow-link ${active ? 'active' : ''}`}>
+          <div className="nav-group">
+            <p className="eyebrow">Flow</p>
+            <nav className="flow-nav" aria-label="Primary flow">
+              {FLOW_LINKS.map((link) => {
+                const active =
+                  link.to === '/simulation'
+                    ? location.pathname.startsWith('/simulation')
+                    : location.pathname === link.to
+                return (
+                  <NavLink key={link.to} to={link.to} className={`flow-link ${active ? 'active' : ''}`}>
+                    {link.label}
+                  </NavLink>
+                )
+              })}
+            </nav>
+          </div>
+
+          <div className="nav-group nav-group-utility">
+            <p className="eyebrow">Reference</p>
+            <nav className="utility-nav" aria-label="Utility navigation">
+              {UTILITY_LINKS.map((link) => (
+                <NavLink key={link.to} to={link.to} className="utility-link">
                   {link.label}
                 </NavLink>
-              )
-            })}
-          </nav>
-
-          <nav className="utility-nav" aria-label="Utility navigation">
-            {UTILITY_LINKS.map((link) => (
-              <NavLink key={link.to} to={link.to} className="utility-link">
-                {link.label}
-              </NavLink>
-            ))}
-          </nav>
+              ))}
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -57,4 +65,3 @@ export function AppShell() {
     </div>
   )
 }
-

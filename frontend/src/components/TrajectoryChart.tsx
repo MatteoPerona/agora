@@ -22,7 +22,7 @@ export function TrajectoryChart({ series, roundGoal }: TrajectoryChartProps) {
   const height = 260
 
   return (
-    <div className="chart-shell">
+    <div className="chart-shell trajectory-shell">
       <svg viewBox={`0 0 ${width} ${height}`} className="trajectory-chart" role="img" aria-label="Opinion trajectory chart">
         <line x1="48" x2={width - 24} y1={height / 2} y2={height / 2} className="chart-axis" />
         <line x1="48" x2={width - 24} y1="24" y2="24" className="chart-grid" />

@@ -138,121 +138,159 @@ export function PersonasScreen() {
           <p className="eyebrow">Step 2</p>
           <h2>Choose the panel</h2>
           <p className="screen-summary">
-            Start from the LLM’s preselected set, then search and swap personas until the room feels like the right
-            mix of tension and expertise.
+            Start from the preselected set, then refine the room until the mix of tension and expertise feels right.
           </p>
         </div>
 
-        <div className="context-strip">
-          <div className="context-chip">
-            <span className="eyebrow">Prompt</span>
-            <p>{draft.prompt}</p>
-          </div>
-          {draft.documents.length ? (
-            <div className="context-chip">
-              <span className="eyebrow">Documents</span>
-              <p>{draft.documents.map((document) => document.filename).join(', ')}</p>
+        <div className="screen-subpanel personas-context-panel">
+          <div className="section-row spaced">
+            <div>
+              <p className="eyebrow">Decision context</p>
+              <h3>What this panel is solving</h3>
             </div>
-          ) : null}
-        </div>
-
-        {draft.recommendation?.selection_notice ? (
-          <p className="inline-notice">{draft.recommendation.selection_notice}</p>
-        ) : null}
-        {error ? <p className="inline-error">{error}</p> : null}
-
-        <div className="section-row">
-          <div>
-            <p className="eyebrow">Preselected personas</p>
-            <h3>{recommending ? 'Building the opening panel…' : 'Suggested by the selector'}</h3>
+            <span className="metric-pill">{draft.documents.length ? `${draft.documents.length} docs` : 'No docs'}</span>
           </div>
-        </div>
 
-        <div className="recommendation-strip">
-          {draft.recommendation?.recommendations.map((entry) => (
-            <PersonaCard
-              key={entry.persona.id}
-              persona={entry.persona}
-              selected={draft.selectedPersonaIds.includes(entry.persona.id)}
-              onToggle={togglePersona}
-              reasons={entry.reasons}
-              stance={entry.initial_stance}
-              compact
-            />
-          ))}
-        </div>
-
-        <div className="section-row spaced">
-          <div>
-            <p className="eyebrow">Search library</p>
-            <h3>All personas</h3>
+          <div className="context-strip">
+            <div className="context-chip">
+              <span className="eyebrow">Prompt</span>
+              <p>{draft.prompt}</p>
+            </div>
+            {draft.documents.length ? (
+              <div className="context-chip">
+                <span className="eyebrow">Documents</span>
+                <p>{draft.documents.map((document) => document.filename).join(', ')}</p>
+              </div>
+            ) : null}
           </div>
-          <input
-            className="field search-field"
-            placeholder="Search by name, summary, or tags"
-            value={search}
-            onChange={(event) =>
-              startTransition(() => {
-                setSearch(event.target.value)
-              })
-            }
-          />
+
+          {draft.recommendation?.selection_notice ? <p className="inline-notice">{draft.recommendation.selection_notice}</p> : null}
+          {error ? <p className="inline-error">{error}</p> : null}
         </div>
 
-        {loading ? <p className="supporting-copy">Loading personas…</p> : null}
+        <div className="screen-subpanel personas-recommendations-panel">
+          <div className="section-row spaced">
+            <div>
+              <p className="eyebrow">Opening panel</p>
+              <h3>{recommending ? 'Building recommendations…' : 'Suggested by the selector'}</h3>
+            </div>
+            <span className="metric-pill">{draft.recommendation?.recommendations.length ?? 0} picks</span>
+          </div>
 
-        <div className="persona-grid">
-          {visiblePersonas.map((persona) => {
-            const recommendation = draft.recommendation?.recommendations.find((entry) => entry.persona.id === persona.id)
-            return (
+          <p className="supporting-copy">
+            Use the selector’s opening set as a starting point, then edit toward the room you actually want.
+          </p>
+
+          <div className="recommendation-strip">
+            {draft.recommendation?.recommendations.map((entry) => (
               <PersonaCard
-                key={persona.id}
-                persona={persona}
-                selected={draft.selectedPersonaIds.includes(persona.id)}
+                key={entry.persona.id}
+                persona={entry.persona}
+                selected={draft.selectedPersonaIds.includes(entry.persona.id)}
                 onToggle={togglePersona}
-                reasons={recommendation?.reasons}
-                stance={recommendation?.initial_stance}
+                reasons={entry.reasons}
+                stance={entry.initial_stance}
+                compact
               />
-            )
-          })}
+            ))}
+          </div>
+        </div>
+
+        <div className="screen-subpanel personas-library-panel">
+          <div className="section-row spaced">
+            <div>
+              <p className="eyebrow">Library</p>
+              <h3>Browse every persona</h3>
+            </div>
+            <input
+              className="field search-field"
+              placeholder="Search by name, summary, or tags"
+              value={search}
+              onChange={(event) =>
+                startTransition(() => {
+                  setSearch(event.target.value)
+                })
+              }
+            />
+          </div>
+
+          <div className="section-row spaced">
+            <p className="supporting-copy">
+              {loading ? 'Loading personas…' : `${visiblePersonas.length} personas match your search`}
+            </p>
+            <span className="metric-pill">{selectedPersonas.length} selected</span>
+          </div>
+
+          <div className="persona-grid">
+            {visiblePersonas.map((persona) => {
+              const recommendation = draft.recommendation?.recommendations.find(
+                (entry) => entry.persona.id === persona.id,
+              )
+              return (
+                <PersonaCard
+                  key={persona.id}
+                  persona={persona}
+                  selected={draft.selectedPersonaIds.includes(persona.id)}
+                  onToggle={togglePersona}
+                  reasons={recommendation?.reasons}
+                  stance={recommendation?.initial_stance}
+                />
+              )
+            })}
+          </div>
         </div>
       </article>
 
       <aside className="screen-panel supporting-panel sticky-panel">
         <div className="section-copy">
-          <p className="eyebrow">Selected panel</p>
+          <p className="eyebrow">Selection dock</p>
           <h3>{draft.selectedPersonaIds.length} personas ready</h3>
-          <p className="supporting-copy">
-            Keep at least three. The selected strip stays pinned so you can swap without losing track of the room.
-          </p>
+          <p className="supporting-copy">Keep at least three. The dock stays visible so the room never loses shape.</p>
+        </div>
+
+        <div className="screen-subpanel personas-selected-panel">
+          <div className="section-row spaced">
+            <div>
+              <p className="eyebrow">Current room</p>
+              <h3>Chosen personas</h3>
+            </div>
+            <span className="metric-pill">{draft.selectedPersonaIds.length}/8</span>
+          </div>
+
+          <div className="selected-panel-stack">
+            {selectedPersonas.map((persona) => {
+              const recommendation = draft.recommendation?.recommendations.find((entry) => entry.persona.id === persona.id)
+              return (
+                <PersonaCard
+                  key={persona.id}
+                  persona={persona}
+                  selected
+                  onToggle={togglePersona}
+                  reasons={recommendation?.reasons}
+                  stance={recommendation?.initial_stance}
+                  compact
+                />
+              )
+            })}
+          </div>
         </div>
 
         {profile ? (
-          <div className="mini-card">
+          <div className="screen-subpanel personas-guidance-panel">
             <p className="eyebrow">Blind spot guidance</p>
-            <p className="supporting-copy">{draft.recommendation?.blind_spot_message ?? profile.ignored_perspective_types.join(', ')}</p>
+            <p className="supporting-copy">
+              {draft.recommendation?.blind_spot_message ?? profile.ignored_perspective_types.join(', ')}
+            </p>
           </div>
         ) : null}
 
-        <div className="selected-panel-stack">
-          {selectedPersonas.map((persona) => {
-            const recommendation = draft.recommendation?.recommendations.find((entry) => entry.persona.id === persona.id)
-            return (
-              <PersonaCard
-                key={persona.id}
-                persona={persona}
-                selected
-                onToggle={togglePersona}
-                reasons={recommendation?.reasons}
-                stance={recommendation?.initial_stance}
-                compact
-              />
-            )
-          })}
-        </div>
-
         <div className="button-column">
-          <button className="primary-button" type="button" onClick={() => void handleStartSimulation()} disabled={starting || draft.selectedPersonaIds.length < 3}>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void handleStartSimulation()}
+            disabled={starting || draft.selectedPersonaIds.length < 3}
+          >
             {starting ? 'Starting…' : 'Start simulation'}
           </button>
           <button className="secondary-button" type="button" onClick={() => navigate('/start')}>

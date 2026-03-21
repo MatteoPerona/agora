@@ -89,8 +89,9 @@ export function SimulationGraph({ roster, networkEdges, messages }: SimulationGr
   }, [networkEdges, roster])
 
   return (
-    <div className="graph-shell">
+    <div className="graph-shell graph-frame">
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="simulation-graph" role="img" aria-label="Agent interaction graph">
+        <desc>An interaction graph showing personas, their stances, and recent influence links.</desc>
         <defs>
           <filter id="glow">
             <feGaussianBlur stdDeviation="6" result="blurred" />
@@ -131,7 +132,7 @@ export function SimulationGraph({ roster, networkEdges, messages }: SimulationGr
               <text y="6" textAnchor="middle" className="graph-node-emoji">
                 {node.avatar_emoji}
               </text>
-              <text y={radius + 18} textAnchor="middle" className="graph-node-label">
+              <text y={radius + 18} textAnchor="middle" className="graph-node-label graph-node-meta">
                 {node.persona_name}
               </text>
             </g>

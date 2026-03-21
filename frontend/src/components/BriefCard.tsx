@@ -6,8 +6,8 @@ interface BriefCardProps {
 
 export function BriefCard({ brief }: BriefCardProps) {
   return (
-    <section className="card brief-card">
-      <div className="section-heading">
+    <section className="card brief-card brief-layout">
+      <div className="section-heading brief-intro">
         <div>
           <p className="eyebrow">Decision brief</p>
           <h2>Where the panel landed</h2>
@@ -16,21 +16,21 @@ export function BriefCard({ brief }: BriefCardProps) {
       <p className="brief-headline">{brief.headline}</p>
       <p className="supporting-copy">{brief.landscape_summary}</p>
 
-      <div className="brief-grid">
-        <div>
+      <div className="brief-grid brief-columns">
+        <section className="brief-column">
           <h3>Strongest arguments</h3>
           <div className="stack">
             {brief.strongest_arguments.map((argument, index) => (
-              <article key={`${argument.persona_name}-${argument.title}-${index}`} className="mini-card">
+              <article key={`${argument.persona_name}-${argument.title}-${index}`} className="mini-card brief-argument">
                 <p className="eyebrow">{argument.persona_name}</p>
                 <strong>{argument.title}</strong>
                 <p>{argument.explanation}</p>
               </article>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div>
+        <section className="brief-column">
           <h3>Key uncertainties</h3>
           <ul className="brief-list">
             {brief.key_uncertainties.map((item) => (
@@ -43,17 +43,17 @@ export function BriefCard({ brief }: BriefCardProps) {
               <li key={item}>{item}</li>
             ))}
           </ul>
-        </div>
+        </section>
       </div>
 
-      <div>
+      <section>
         <h3>Suggested next steps</h3>
         <ol className="brief-list ordered">
           {brief.suggested_next_steps.map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ol>
-      </div>
+      </section>
     </section>
   )
 }

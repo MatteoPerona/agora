@@ -104,59 +104,69 @@ export function StartScreen() {
 
   return (
     <section className="screen-grid start-screen">
-      <article className="screen-panel primary-panel">
-        <div className="section-copy">
-          <p className="eyebrow">Step 1</p>
-          <h2>Frame the decision</h2>
+      <article className="screen-panel primary-panel start-main-panel">
+        <div className="section-copy start-hero">
+          <div>
+            <p className="eyebrow">Step 1</p>
+            <h2>Frame the decision</h2>
+          </div>
           <p className="screen-summary">
             Give the engine the core question and any supporting material so the next screen can assemble a sharper
             panel around the real decision, not a vague summary.
           </p>
         </div>
 
-        <label className="field-label" htmlFor="decision-prompt">
-          Decision prompt
-        </label>
-        <textarea
-          id="decision-prompt"
-          className="field textarea hero-textarea"
-          placeholder="Describe the decision, the stakes, and the constraints that matter."
-          value={prompt}
-          onChange={(event) => {
-            setPrompt(event.target.value)
-            setError('')
-          }}
-          rows={11}
-        />
-
-        <div className="button-row">
-          <button className="primary-button" type="button" onClick={handleContinue} disabled={uploading}>
-            Continue to persona selection
-          </button>
-          <label className="secondary-button upload-trigger">
-            Upload documents
-            <input
-              type="file"
-              accept=".txt,.md,.pdf"
-              multiple
-              hidden
-              onChange={(event) => void handleFiles(event.target.files)}
-            />
+        <div className="start-prompt-block">
+          <label className="field-label" htmlFor="decision-prompt">
+            Decision prompt
           </label>
+          <textarea
+            id="decision-prompt"
+            className="field textarea hero-textarea"
+            placeholder="Describe the decision, the stakes, and the constraints that matter."
+            value={prompt}
+            onChange={(event) => {
+              setPrompt(event.target.value)
+              setError('')
+            }}
+            rows={11}
+          />
+        </div>
+
+        <div className="start-actions">
+          <div className="button-row">
+            <button className="primary-button" type="button" onClick={handleContinue} disabled={uploading}>
+              Continue to persona selection
+            </button>
+            <label className="secondary-button upload-trigger">
+              Upload documents
+              <input
+                type="file"
+                accept=".txt,.md,.pdf"
+                multiple
+                hidden
+                onChange={(event) => void handleFiles(event.target.files)}
+              />
+            </label>
+          </div>
+          <p className="supporting-copy">Upload notes now or continue with a clean prompt. You can refine the context later.</p>
         </div>
 
         {error ? <p className="inline-error">{error}</p> : null}
       </article>
 
-      <aside className="screen-panel supporting-panel">
-        <div className="section-copy">
-          <p className="eyebrow">Document context</p>
-          <h3>Related material</h3>
+      <aside className="screen-panel supporting-panel start-rail-panel">
+        <div className="section-copy start-rail-header">
+          <div>
+            <p className="eyebrow">Document context</p>
+            <h3>Related material</h3>
+          </div>
+          <p className="supporting-copy">
+            Supported in this pass: `.txt`, `.md`, `.pdf`, up to 5 files and 10 MB each.
+          </p>
         </div>
 
-        <p className="supporting-copy">Supported in this pass: `.txt`, `.md`, `.pdf`, up to 5 files and 10 MB each.</p>
-
-        <div className="document-stack">
+        <div className="document-stack start-document-stack">
           {draft.documents.map((document) => (
             <article key={document.id} className="document-card">
               <div>
@@ -184,9 +194,12 @@ export function StartScreen() {
           ))}
 
           {!draft.documents.length && !pendingUploads.length ? (
-            <div className="empty-card">
-              <h3>No documents yet</h3>
-              <p>Attach investor notes, customer feedback, or any material that should influence persona selection.</p>
+            <div className="empty-card start-empty-state">
+              <div>
+                <h3>No documents yet</h3>
+                <p>Attach investor notes, customer feedback, or any material that should influence persona selection.</p>
+              </div>
+              <p className="eyebrow">Optional</p>
             </div>
           ) : null}
         </div>

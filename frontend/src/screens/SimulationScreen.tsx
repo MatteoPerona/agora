@@ -160,31 +160,33 @@ export function SimulationScreen() {
 
   return (
     <>
-      <section className="simulation-header screen-panel">
-        <div className="section-copy">
+      <section className="simulation-header screen-panel simulation-hero">
+        <div className="section-copy simulation-hero-copy">
           <p className="eyebrow">Step 3</p>
           <h2>Run the simulation</h2>
           <p className="screen-summary">{session.decision}</p>
         </div>
 
-        <div className="simulation-controls">
+        <div className="simulation-controls simulation-toolbar">
           <span className="metric-pill">round {session.current_round}/{session.round_goal}</span>
-          <button className="secondary-button" type="button" onClick={() => setAutoRun((current) => !current)} disabled={session.status === 'complete'}>
-            {autoRun ? 'Pause auto-run' : 'Resume auto-run'}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => void advanceSession(session.session_id)} disabled={session.status === 'complete'}>
-            Advance one round
-          </button>
-          <button className="ghost-button" type="button" onClick={() => void handleFinishNow()}>
-            Finish now
-          </button>
+          <div className="button-row simulation-action-row">
+            <button className="secondary-button" type="button" onClick={() => setAutoRun((current) => !current)} disabled={session.status === 'complete'}>
+              {autoRun ? 'Pause auto-run' : 'Resume auto-run'}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => void advanceSession(session.session_id)} disabled={session.status === 'complete'}>
+              Advance one round
+            </button>
+            <button className="ghost-button" type="button" onClick={() => void handleFinishNow()}>
+              Finish now
+            </button>
+          </div>
         </div>
       </section>
 
       {error ? <p className="inline-error">{error}</p> : null}
 
-      <section className="simulation-layout">
-        <article className="screen-panel graph-panel">
+      <section className="simulation-layout simulation-workspace">
+        <article className="screen-panel graph-panel graph-stage">
           <div className="section-row">
             <div>
               <p className="eyebrow">Interaction graph</p>
@@ -195,7 +197,7 @@ export function SimulationScreen() {
           <SimulationGraph roster={session.roster} networkEdges={session.network_edges} messages={session.messages} />
         </article>
 
-        <div className="simulation-sidebar">
+        <div className="simulation-sidebar simulation-sidebar-stack">
           <article className="screen-panel chart-panel">
             <div className="section-row">
               <div>
@@ -206,7 +208,7 @@ export function SimulationScreen() {
             <TrajectoryChart series={session.trajectories} roundGoal={session.round_goal} />
           </article>
 
-          <article className="screen-panel transcript-panel">
+          <article className="screen-panel transcript-panel transcript-stage">
             <div className="section-row">
               <div>
                 <p className="eyebrow">Transcript</p>
@@ -214,20 +216,22 @@ export function SimulationScreen() {
               </div>
             </div>
 
-            <textarea
-              className="field textarea"
-              rows={3}
-              placeholder="Ask a question or introduce new information."
-              value={interjection}
-              onChange={(event) => setInterjection(event.target.value)}
-            />
-            <div className="button-row">
-              <button className="primary-button" type="button" onClick={() => void handleSendInterjection()}>
-                Send interjection
-              </button>
-              <Link className="secondary-button inline-link" to="/personas">
-                Adjust panel
-              </Link>
+            <div className="transcript-composer">
+              <textarea
+                className="field textarea"
+                rows={3}
+                placeholder="Ask a question or introduce new information."
+                value={interjection}
+                onChange={(event) => setInterjection(event.target.value)}
+              />
+              <div className="button-row transcript-actions">
+                <button className="primary-button" type="button" onClick={() => void handleSendInterjection()}>
+                  Send interjection
+                </button>
+                <Link className="secondary-button inline-link" to="/personas">
+                  Adjust panel
+                </Link>
+              </div>
             </div>
             <DebateFeed messages={session.messages} />
           </article>
@@ -235,13 +239,13 @@ export function SimulationScreen() {
       </section>
 
       {session.brief ? (
-        <section className="screen-panel summary-dock">
+        <section className="screen-panel summary-dock summary-panel">
           <div className="section-row spaced">
             <div>
               <p className="eyebrow">Summary</p>
               <h3>The simulation has finished</h3>
             </div>
-            <div className="button-row">
+            <div className="button-row summary-actions">
               <button className="secondary-button" type="button" onClick={() => setInlineSummaryOpen((current) => !current)}>
                 {inlineSummaryOpen ? 'Hide summary' : 'Show summary'}
               </button>
@@ -260,7 +264,7 @@ export function SimulationScreen() {
 
       {summaryOverlayOpen && session.brief ? (
         <div className="summary-overlay" role="dialog" aria-modal="true">
-          <div className="summary-overlay-panel">
+          <div className="summary-overlay-panel summary-panel">
             <div className="section-row spaced">
               <div>
                 <p className="eyebrow">Expanded summary</p>

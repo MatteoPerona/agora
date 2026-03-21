@@ -11,6 +11,7 @@ export function ProfileCard({ profile }: ProfileCardProps) {
         <div>
           <p className="eyebrow">Adaptive layer</p>
           <h2>Your reasoning profile</h2>
+          <p className="supporting-copy">A quick read on your deliberation habits, blind spots, and the themes you return to.</p>
         </div>
       </div>
 
@@ -29,26 +30,28 @@ export function ProfileCard({ profile }: ProfileCardProps) {
         </article>
       </div>
 
-      <div className="profile-group">
-        <h3>Most engaged tags</h3>
-        <div className="tag-row">
-          {profile.most_engaged_tags.map((tag) => (
-            <span className="tag" key={tag}>
-              {tag}
-            </span>
-          ))}
-        </div>
-      </div>
+      <div className="brief-grid">
+        <section className="profile-group">
+          <h3>Most engaged tags</h3>
+          <div className="tag-row">
+            {profile.most_engaged_tags.map((tag) => (
+              <span className="tag" key={tag}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </section>
 
-      <div className="profile-group">
-        <h3>Blind spots to amplify</h3>
-        <div className="tag-row">
-          {profile.least_engaged_tags.map((tag) => (
-            <span className="tag emphasis" key={tag}>
-              {tag}
-            </span>
-          ))}
-        </div>
+        <section className="profile-group">
+          <h3>Blind spots to amplify</h3>
+          <div className="tag-row">
+            {profile.least_engaged_tags.map((tag) => (
+              <span className="tag emphasis" key={tag}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        </section>
       </div>
 
       <div className="profile-group">
@@ -62,4 +65,3 @@ export function ProfileCard({ profile }: ProfileCardProps) {
     </section>
   )
 }
-
