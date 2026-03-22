@@ -35,7 +35,6 @@ from .services.documents import build_document_context, ingest_upload, select_re
 from .services.personas import expand_natural_language_persona, slugify
 from .services.selection import select_panel
 from .simulation.prompts import build_expand_persona_prompt
-from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
 from .runtime_config import (
     build_effective_settings,
     clear_runtime_config as clear_session_runtime_config,
@@ -136,6 +135,30 @@ def get_simulation_service(
     return SimulationService(session, settings)
 
 
+def require_ai_runtime(settings: Settings, *, action: str) -> None:
+    provider = settings.normalized_provider
+    if provider in {"", "stub"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Configure an AI provider, model, and API key in API Provider before you {action}.",
+        )
+    if not settings.sim_model:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Configure a model in API Provider before you {action}.",
+        )
+    if not settings.sim_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Add an API key in API Provider before you {action}.",
+        )
+    if provider == "openai-compatible-model" and not settings.sim_base_url:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Add a base URL in API Provider before you {action}.",
+        )
+
+
 @app.get("/api/runtime/config", response_model=RuntimeLLMConfigResponse)
 def runtime_config_status(
     request: Request,
@@ -145,13 +168,15 @@ def runtime_config_status(
     session_id = get_session_id(request, response)
     runtime_settings = get_session_runtime_config(session_id)
     resolved = build_effective_settings(settings, runtime_settings)
+    provider = "" if resolved.normalized_provider == "stub" else resolved.sim_provider
+    model = "" if resolved.normalized_provider == "stub" else resolved.sim_model
     return RuntimeLLMConfigResponse(
-        provider=resolved.sim_provider,
-        model=resolved.sim_model,
+        provider=provider,
+        model=model,
         selector_model=resolved.sim_selector_model,
         summary_model=resolved.sim_summary_model,
         base_url=resolved.sim_base_url,
-        api_key_set=bool(resolved.sim_api_key),
+        api_key_set=bool(resolved.sim_api_key) and bool(provider),
         source="session" if runtime_settings else "default",
     )
 
@@ -168,8 +193,8 @@ def set_runtime_config(
         resolved = build_effective_settings(
             settings,
             RuntimeLLMConfig(
-                provider=(payload.provider or "").strip() or "stub",
-                model=(payload.model or "").strip() or "stub",
+                provider=(payload.provider or "").strip(),
+                model=(payload.model or "").strip(),
                 selector_model=payload.selector_model,
                 summary_model=payload.summary_model,
                 base_url=payload.base_url,
@@ -275,21 +300,22 @@ _RANDOM_SEEDS = [
 
 @app.post("/api/personas/random")
 async def random_persona(settings: Settings = Depends(get_runtime_settings)) -> dict:
+    require_ai_runtime(settings, action="generate a random persona")
     seed = random.choice(_RANDOM_SEEDS)
-    if settings.normalized_provider != "stub":
-        try:
-            factory = SimulationProviderFactory(settings)
-            client = StructuredLLMClient(factory.create_selector_backend())
-            result = await client.generate_json(
-                system_prompt="You create detailed, richly characterful debate personas for a philosophical deliberation council.",
-                user_prompt=build_expand_persona_prompt(seed),
-                schema=CreatePersonaRequest,
-            )
-            return {**result.model_dump(), "seed_description": seed}
-        except Exception as exc:
-            logger.warning("LLM random persona expansion failed (%s); falling back to heuristic.", exc)
-    payload = expand_natural_language_persona(seed)
-    return {**payload.model_dump(), "seed_description": seed}
+    try:
+        from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
+
+        factory = SimulationProviderFactory(settings)
+        client = StructuredLLMClient(factory.create_selector_backend())
+        result = await client.generate_json(
+            system_prompt="You create detailed, richly characterful debate personas for a philosophical deliberation council.",
+            user_prompt=build_expand_persona_prompt(seed),
+            schema=CreatePersonaRequest,
+        )
+        return {**result.model_dump(), "seed_description": seed}
+    except Exception as exc:
+        logger.warning("AI random persona generation failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"AI random persona generation failed: {exc}")
 
 
 @app.delete("/api/personas/{persona_id}")
@@ -306,21 +332,21 @@ async def expand_persona(
     request: ExpandPersonaRequest,
     settings: Settings = Depends(get_runtime_settings),
 ) -> dict:
-    # Use the real LLM when a provider is configured; otherwise use the fast heuristic fallback.
-    if settings.normalized_provider != "stub":
-        try:
-            factory = SimulationProviderFactory(settings)
-            client = StructuredLLMClient(factory.create_selector_backend())
-            result = await client.generate_json(
-                system_prompt="You create detailed, realistic debate personas for structured deliberation simulations.",
-                user_prompt=build_expand_persona_prompt(request.description),
-                schema=CreatePersonaRequest,
-            )
-            return result.model_dump()
-        except Exception as exc:
-            logger.warning("LLM persona expansion failed (%s); falling back to heuristic.", exc)
-    payload = expand_natural_language_persona(request.description)
-    return payload.model_dump()
+    require_ai_runtime(settings, action="expand a persona")
+    try:
+        from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
+
+        factory = SimulationProviderFactory(settings)
+        client = StructuredLLMClient(factory.create_selector_backend())
+        result = await client.generate_json(
+            system_prompt="You create detailed, realistic debate personas for structured deliberation simulations.",
+            user_prompt=build_expand_persona_prompt(request.description),
+            schema=CreatePersonaRequest,
+        )
+        return result.model_dump()
+    except Exception as exc:
+        logger.warning("AI persona expansion failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"AI persona expansion failed: {exc}")
 
 
 @app.post("/api/personas")
@@ -353,18 +379,25 @@ async def panel_recommendation(
     repository: AppRepository = Depends(get_repository),
     settings: Settings = Depends(get_runtime_settings),
 ) -> PanelRecommendationResponse:
+    from .simulation.provider import SimulationProviderFactory
+
+    require_ai_runtime(settings, action="recommend a council")
     documents = repository.get_documents(request.document_ids)
     if len(documents) != len(request.document_ids):
         raise HTTPException(status_code=404, detail="One or more documents could not be found.")
-    response = await select_panel(
-        decision=request.decision,
-        documents=documents,
-        personas=repository.list_personas(),
-        profile=repository.get_profile(),
-        panel_size=request.panel_size,
-        manual_ids=request.manual_ids,
-        provider_factory=SimulationProviderFactory(settings),
-    )
+    try:
+        response = await select_panel(
+            decision=request.decision,
+            documents=documents,
+            personas=repository.list_personas(),
+            profile=repository.get_profile(),
+            panel_size=request.panel_size,
+            manual_ids=request.manual_ids,
+            provider_factory=SimulationProviderFactory(settings),
+        )
+    except Exception as exc:
+        logger.warning("AI panel recommendation failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"AI panel recommendation failed: {exc}")
     repository.session.commit()
     return response
 
@@ -373,21 +406,31 @@ async def panel_recommendation(
 async def new_session(
     request: CreateSessionRequest,
     repository: AppRepository = Depends(get_repository),
-    service: "SimulationService" = Depends(get_simulation_service),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> SessionSnapshot:
+    from .simulation.service import SimulationService
+
+    require_ai_runtime(settings, action="start a debate")
+    service = SimulationService(repository.session, settings)
     personas = [repository.get_persona(persona_id) for persona_id in request.persona_ids]
     if any(persona is None for persona in personas):
         raise HTTPException(status_code=404, detail="One or more personas could not be found.")
     documents = repository.get_documents(request.document_ids)
     if len(documents) != len(request.document_ids):
         raise HTTPException(status_code=404, detail="One or more documents could not be found.")
-    return await service.create_session(
-        request=request,
-        personas=[persona for persona in personas if persona is not None],
-        profile=repository.get_profile(),
-        document_context=build_document_context(documents),
-        document_names=[document.filename for document in documents],
-    )
+    try:
+        return await service.create_session(
+            request=request,
+            personas=[persona for persona in personas if persona is not None],
+            profile=repository.get_profile(),
+            document_context=build_document_context(documents),
+            document_names=[document.filename for document in documents],
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Debate creation failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"Failed to start debate: {exc}")
 
 
 @app.get("/api/sessions/{session_id}", response_model=SessionSnapshot)
@@ -414,8 +457,12 @@ def interject(
 async def advance(
     session_id: str,
     repository: AppRepository = Depends(get_repository),
-    service: "SimulationService" = Depends(get_simulation_service),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> SessionSnapshot:
+    from .simulation.service import SimulationService
+
+    require_ai_runtime(settings, action="continue a debate")
+    service = SimulationService(repository.session, settings)
     try:
         simulation = repository.get_simulation(session_id)
     except ValueError:
@@ -432,14 +479,21 @@ async def advance(
             return await service.advance_session(simulation_id=session_id, documents=relevant_chunks)
     except ValueError:
         raise HTTPException(status_code=404, detail="Session not found.")
+    except Exception as exc:
+        logger.warning("Debate advance failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"Failed to continue debate: {exc}")
 
 
 @app.post("/api/sessions/{session_id}/finish", response_model=SessionSnapshot)
 async def finish(
     session_id: str,
     repository: AppRepository = Depends(get_repository),
-    service: "SimulationService" = Depends(get_simulation_service),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> SessionSnapshot:
+    from .simulation.service import SimulationService
+
+    require_ai_runtime(settings, action="finish a debate")
+    service = SimulationService(repository.session, settings)
     try:
         simulation = repository.get_simulation(session_id)
     except ValueError:
@@ -450,12 +504,16 @@ async def finish(
         query=f"{simulation.decision} final brief",
         limit=6,
     )
-    async with session_lock(session_id):
-        return await service.finish_session(
-            simulation_id=session_id,
-            documents=relevant_chunks,
-            profile=repository.get_profile(),
-        )
+    try:
+        async with session_lock(session_id):
+            return await service.finish_session(
+                simulation_id=session_id,
+                documents=relevant_chunks,
+                profile=repository.get_profile(),
+            )
+    except Exception as exc:
+        logger.warning("Debate finish failed (%s).", exc)
+        raise HTTPException(status_code=502, detail=f"Failed to finish debate: {exc}")
 
 
 @app.get("/api/sessions/{session_id}/events")

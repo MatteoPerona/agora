@@ -1,3 +1,6 @@
-from .service import SimulationService
+"""Simulation package.
 
-__all__ = ["SimulationService"]
+Keep package import side effects minimal so the API can boot quickly on Fly.
+"""
+
+__all__: list[str] = []

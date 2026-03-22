@@ -7,7 +7,11 @@ __pycache__
 node_modules
 frontend/node_modules
 frontend/dist
-backend/data
+backend/data/agora.sqlite3
+backend/data/*.sqlite3-*
+backend/data/agora.legacy-*.sqlite3
+backend/data/simulations
+backend/data/uploads
 log
 output
 NOTES.md

@@ -116,8 +116,8 @@ class UpdatePersonaRequest(BaseModel):
 
 
 class RuntimeLLMConfig(BaseModel):
-    provider: str = "stub"
-    model: str = "stub"
+    provider: str = ""
+    model: str = ""
     selector_model: str | None = None
     summary_model: str | None = None
     base_url: str | None = None

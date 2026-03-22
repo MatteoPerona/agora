@@ -5,12 +5,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
-try:
-    from camel.models import ModelFactory
-    from camel.types import ModelPlatformType
-except ImportError:
-    ModelFactory = None
-    ModelPlatformType = None
 from pydantic import BaseModel
 
 from ..config import Settings
@@ -83,10 +77,15 @@ class SimulationProviderFactory:
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        if self.settings.normalized_provider == "stub":
-            return LocalScriptedBackend(model_config_dict=model_config_dict)
+        if self.settings.normalized_provider in {"", "stub"}:
+            raise RuntimeError(
+                "The stub provider is disabled. Configure a real AI provider, model, and API key."
+            )
 
-        if ModelFactory is None or ModelPlatformType is None:
+        try:
+            from camel.models import ModelFactory
+            from camel.types import ModelPlatformType
+        except ImportError:
             raise RuntimeError(
                 "camel-ai is required for non-stub simulation providers. "
                 "Use SIM_PROVIDER=stub on Python 3.12, or install a Python version supported by camel-ai."

@@ -36,8 +36,8 @@ class Settings(BaseSettings):
         alias="SIMULATIONS_DIR",
     )
 
-    sim_provider: str = Field(default="stub", alias="SIM_PROVIDER")
-    sim_model: str = Field(default="stub", alias="SIM_MODEL")
+    sim_provider: str = Field(default="anthropic", alias="SIM_PROVIDER")
+    sim_model: str = Field(default="claude-haiku-4-5-20251001", alias="SIM_MODEL")
     sim_api_key: str | None = Field(default=None, alias="SIM_API_KEY")
     sim_base_url: str | None = Field(default=None, alias="SIM_BASE_URL")
     sim_summary_model: str | None = Field(default=None, alias="SIM_SUMMARY_MODEL")
@@ -47,14 +47,11 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_provider_settings(self) -> "Settings":
         provider = self.normalized_provider
-        if provider == "stub":
+        if not provider or provider == "stub":
             return self
 
         if not self.sim_model:
             raise ValueError("SIM_MODEL must be set when using a real simulation provider.")
-
-        if provider in {"openai-compatible-model", "openai", "anthropic"} and not self.sim_api_key:
-            raise ValueError(f"SIM_API_KEY must be set for provider {provider}.")
 
         if provider == "openai-compatible-model" and not self.sim_base_url:
             raise ValueError("SIM_BASE_URL must be set for provider openai-compatible-model.")

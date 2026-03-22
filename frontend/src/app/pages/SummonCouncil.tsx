@@ -100,8 +100,8 @@ export function SummonCouncil() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [showRuntimeConfig, setShowRuntimeConfig] = useState(false);
   const [runtimeConfig, setRuntimeConfig] = useState({
-    provider: "stub",
-    model: "stub",
+    provider: "anthropic",
+    model: "claude-haiku-4-5-20251001",
     selector_model: "",
     summary_model: "",
     base_url: "",
@@ -112,6 +112,18 @@ export function SummonCouncil() {
   const [runtimeNotice, setRuntimeNotice] = useState<string | null>(null);
   const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(false);
   const [runtimeConfigError, setRuntimeConfigError] = useState<string | null>(null);
+  const providerRequiresBaseUrl = runtimeConfig.provider.trim() === "openai-compatible-model";
+  const hasApiKey = runtimeConfig.api_key.trim().length > 0 || runtimeConfig.api_key_set;
+  const runtimeWarning = !runtimeConfig.provider.trim()
+    ? "Choose an AI provider before using AI-powered personas, recommendations, or debates."
+    : !runtimeConfig.model.trim()
+      ? "Enter a model name before using AI features."
+      : providerRequiresBaseUrl && !runtimeConfig.base_url.trim()
+        ? "Enter a base URL for your OpenAI-compatible provider before using AI features."
+        : !hasApiKey
+          ? "Add an API key in API Provider before using AI features."
+          : null;
+  const aiReady = runtimeWarning === null;
 
   useEffect(() => {
     if (!question) {
@@ -218,6 +230,10 @@ export function SummonCouncil() {
   };
 
   const handleRecommend = async () => {
+    if (!aiReady) {
+      setCreateError(runtimeWarning ?? "Configure API Provider before requesting an AI recommendation.");
+      return;
+    }
     setLoadingRecommend(true);
     setCreateError(null);
     try {
@@ -233,6 +249,10 @@ export function SummonCouncil() {
   };
 
   const handleRandomPersona = async () => {
+    if (!aiReady) {
+      setCustomError(runtimeWarning ?? "Configure API Provider before generating personas with AI.");
+      return;
+    }
     setCustomError(null);
     setLoadingRandom(true);
     try {
@@ -247,6 +267,10 @@ export function SummonCouncil() {
   };
 
   const handleExpandPersona = async () => {
+    if (!aiReady) {
+      setCustomError(runtimeWarning ?? "Configure API Provider before expanding personas with AI.");
+      return;
+    }
     if (customDescription.trim().length < 12) {
       setCustomError("Description must be at least 12 characters");
       return;
@@ -337,6 +361,10 @@ export function SummonCouncil() {
 
   const handleStartDebate = async () => {
     if (selectedIds.length < 3) return;
+    if (!aiReady) {
+      setCreateError(runtimeWarning ?? "Configure API Provider before starting a debate.");
+      return;
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -353,13 +381,17 @@ export function SummonCouncil() {
   };
 
   const handleSaveRuntimeConfig = async () => {
+    if (!aiReady) {
+      setRuntimeConfigError(runtimeWarning ?? "Complete the API Provider form before saving.");
+      return;
+    }
     setRuntimeConfigLoading(true);
     setRuntimeConfigError(null);
     setRuntimeNotice(null);
     try {
       await saveRuntimeConfig({
-        provider: (runtimeConfig.provider || "stub").trim(),
-        model: (runtimeConfig.model || "stub").trim(),
+        provider: runtimeConfig.provider.trim(),
+        model: runtimeConfig.model.trim(),
         selector_model: runtimeConfig.selector_model.trim() || null,
         summary_model: runtimeConfig.summary_model.trim() || null,
         base_url: runtimeConfig.base_url.trim() || null,
@@ -381,7 +413,7 @@ export function SummonCouncil() {
     try {
       await clearRuntimeConfigRequest();
       await refreshRuntimeConfig();
-      setRuntimeNotice("Reverted to server defaults for this session.");
+      setRuntimeNotice("Runtime configuration cleared. AI features stay disabled until you configure a provider and API key.");
     } catch (e) {
       setRuntimeConfigError(`Failed to clear config: ${e instanceof Error ? e.message : "Unknown error"}`);
     } finally {
@@ -441,7 +473,7 @@ export function SummonCouncil() {
               variant="accent"
               size="sm"
               onClick={handleRecommend}
-              disabled={loadingRecommend}
+              disabled={loadingRecommend || !aiReady}
             >
               {loadingRecommend ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Thinking...</>
@@ -478,12 +510,20 @@ export function SummonCouncil() {
             <p className="text-sm">{runtimeNotice}</p>
           </BrutalistCard>
         )}
+        {runtimeWarning && (
+          <BrutalistCard className="p-4 mb-4 border-amber-500 bg-amber-50 text-amber-900">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              <p className="text-sm">{runtimeWarning}</p>
+            </div>
+          </BrutalistCard>
+        )}
 
         {showRuntimeConfig && (
           <BrutalistCard className="p-6 mb-6">
             <h3 className="mb-4 font-semibold">Runtime LLM settings</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              This is your local browser session only. Keys are sent to the backend and never returned.
+              This is your local browser session only. Keys are sent to the backend and never returned. The stub provider is disabled.
             </p>
             <div className="space-y-3">
               <div>
@@ -493,7 +533,7 @@ export function SummonCouncil() {
                   onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, provider: e.target.value }))}
                   className="w-full border-2 border-black p-2 bg-white"
                 >
-                  <option value="stub">stub</option>
+                  <option value="">Choose provider</option>
                   <option value="anthropic">anthropic</option>
                   <option value="openai-compatible-model">openai-compatible-model</option>
                 </select>
@@ -504,6 +544,7 @@ export function SummonCouncil() {
                   value={runtimeConfig.model}
                   onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, model: e.target.value }))}
                   className="w-full border-2 border-black p-2 bg-white"
+                  placeholder={runtimeConfig.provider === "anthropic" ? "claude-sonnet-4-5" : "Enter model name"}
                 />
               </div>
               <div>
@@ -798,7 +839,7 @@ export function SummonCouncil() {
                     variant="secondary"
                     size="sm"
                     onClick={handleRandomPersona}
-                    disabled={loadingRandom || loadingExpand || savingPersona}
+                    disabled={loadingRandom || loadingExpand || savingPersona || !aiReady}
                   >
                     {loadingRandom ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Conjuring...</>
@@ -822,7 +863,7 @@ export function SummonCouncil() {
                     variant="accent"
                     size="sm"
                     onClick={handleExpandPersona}
-                    disabled={loadingExpand || loadingRandom || savingPersona || customDescription.trim().length < 12}
+                    disabled={loadingExpand || loadingRandom || savingPersona || customDescription.trim().length < 12 || !aiReady}
                   >
                     {loadingExpand ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Expanding...</>
@@ -905,8 +946,8 @@ export function SummonCouncil() {
             variant="primary"
             size="lg"
             onClick={handleStartDebate}
-            disabled={selectedIds.length < 3 || creating}
-            className={selectedIds.length < 3 ? "opacity-50 cursor-not-allowed" : ""}
+            disabled={selectedIds.length < 3 || creating || !aiReady}
+            className={selectedIds.length < 3 || !aiReady ? "opacity-50 cursor-not-allowed" : ""}
           >
             {creating ? (
               <>Creating session<AnimatedDots /></>
@@ -918,6 +959,9 @@ export function SummonCouncil() {
             <p className="text-sm text-muted-foreground">
               Select {3 - selectedIds.length} more persona{3 - selectedIds.length !== 1 ? "s" : ""}
             </p>
+          )}
+          {selectedIds.length >= 3 && runtimeWarning && (
+            <p className="text-sm text-muted-foreground">{runtimeWarning}</p>
           )}
           {selectedIds.length === 0 && (
             <p className="text-sm text-muted-foreground">Select at least 3 personas to begin</p>

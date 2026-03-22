@@ -33,33 +33,29 @@ async def select_panel(
         documents=documents,
     )
 
-    try:
-        backend = provider_factory.create_selector_backend()
-        client = StructuredLLMClient(backend)
-        payload = await client.generate_json(
-            system_prompt="You select a diverse deliberation panel for a structured decision room.",
-            user_prompt=build_panel_selection_prompt(
-                decision=decision,
-                panel_size=panel_size,
-                manual_ids=manual_ids,
-                least_engaged_tags=profile.least_engaged_tags,
-                persona_catalog=[
-                    {
-                        "id": persona.id,
-                        "name": persona.name,
-                        "summary": persona.summary,
-                        "tags": persona.tags,
-                        "visibility": persona.visibility,
-                    }
-                    for persona in personas
-                ],
-                document_context=build_document_context(documents),
-            ),
-            schema=PanelPlannerPayload,
-        )
-    except Exception:
-        fallback.selection_notice = "Provider-backed selection failed, so the deterministic fallback recommender was used instead."
-        return fallback
+    backend = provider_factory.create_selector_backend()
+    client = StructuredLLMClient(backend)
+    payload = await client.generate_json(
+        system_prompt="You select a diverse deliberation panel for a structured decision room.",
+        user_prompt=build_panel_selection_prompt(
+            decision=decision,
+            panel_size=panel_size,
+            manual_ids=manual_ids,
+            least_engaged_tags=profile.least_engaged_tags,
+            persona_catalog=[
+                {
+                    "id": persona.id,
+                    "name": persona.name,
+                    "summary": persona.summary,
+                    "tags": persona.tags,
+                    "visibility": persona.visibility,
+                }
+                for persona in personas
+            ],
+            document_context=build_document_context(documents),
+        ),
+        schema=PanelPlannerPayload,
+    )
 
     selected_map = {recommendation.persona.id: recommendation for recommendation in fallback.recommendations}
     merged_ids = _merge_ids(manual_ids, payload.recommended_ids, fallback.suggested_ids, panel_size)
@@ -78,16 +74,14 @@ async def select_panel(
         )
 
     if not recommendations:
-        fallback.selection_notice = "Provider-backed selection returned no usable personas, so the deterministic fallback recommender was used instead."
-        return fallback
+        raise RuntimeError("AI panel recommendation returned no usable personas.")
 
-    selection_source = "stub" if provider_factory.settings.normalized_provider == "stub" else "provider"
     return PanelRecommendationResponse(
         decision_frame=fallback.decision_frame,
         blind_spot_message=payload.blind_spot_message or fallback.blind_spot_message,
         recommendations=recommendations,
         suggested_ids=[recommendation.persona.id for recommendation in recommendations],
-        selection_source=selection_source,  # type: ignore[arg-type]
+        selection_source="provider",
         selection_notice=None,
     )
 

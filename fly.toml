@@ -1,28 +1,25 @@
-app = "agora"
-primary_region = "iad"
+app = "agora-lvao3a"
+primary_region = "ams"
 
 [build]
   dockerfile = "Dockerfile"
 
-[env]
-  APP_DATABASE_URL = "sqlite:////app/data/agora.sqlite3"
-  UPLOADS_DIR = "/app/data/uploads"
-  SIMULATIONS_DIR = "/app/data/simulations"
-  # Optional defaults for first-time deployment:
-  # Set these to your preferred provider after deploy.
-  SIM_PROVIDER = "stub"
-  SIM_MODEL = "stub"
-
-[[mounts]]
-  source = "agora-data"
+[mounts]
+  source = "agora_data"
   destination = "/app/data"
+  initial_size = "1gb"
 
 [http_service]
   internal_port = 8080
   force_https = true
+  auto_stop_machines = "off"
   auto_start_machines = true
-  auto_stop_machines = false
+
+[deploy]
+  strategy = "rolling"
+  max_unavailable = 1
+  wait_timeout = "10m"
 
 [[vm]]
   size = "shared-cpu-2x"
-  memory = "512mb"
+  memory = "1gb"

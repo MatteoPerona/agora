@@ -64,29 +64,30 @@ def build_effective_settings(base_settings: Settings, runtime_config: RuntimeLLM
     if runtime_config is None:
         return base_settings
 
-    merged = base_settings.model_dump()
+    updates: dict[str, object] = {}
     if runtime_config.provider is not None:
         provider = runtime_config.provider.strip()
         if provider:
-            merged["sim_provider"] = provider
+            updates["sim_provider"] = provider
     if runtime_config.model is not None:
         model = runtime_config.model.strip()
         if model:
-            merged["sim_model"] = model
+            updates["sim_model"] = model
     if runtime_config.selector_model is not None:
         value = runtime_config.selector_model.strip()
-        merged["sim_selector_model"] = value or None
+        updates["sim_selector_model"] = value or None
     if runtime_config.summary_model is not None:
         value = runtime_config.summary_model.strip()
-        merged["sim_summary_model"] = value or None
+        updates["sim_summary_model"] = value or None
     if runtime_config.base_url is not None:
         value = runtime_config.base_url.strip()
-        merged["sim_base_url"] = value or None
+        updates["sim_base_url"] = value or None
     if runtime_config.api_key is not None:
         key = runtime_config.api_key.strip()
-        merged["sim_api_key"] = key or None
+        updates["sim_api_key"] = key or None
 
-    return Settings(**merged)
+    resolved = base_settings.model_copy(update=updates)
+    return resolved.validate_provider_settings()
 
 
 def _prune_stale_configs() -> None:
