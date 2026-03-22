@@ -175,10 +175,6 @@ export function Home() {
         {/* Header */}
         <div className="text-center mb-12 pt-2">
           <div className="relative inline-block mb-6">
-            <div className="flex items-center justify-center mb-2">
-              <div className="flex-1 h-[2px] bg-black"></div>
-            </div>
-
             <div className="flex items-center justify-center gap-6 md:gap-12 px-4 md:px-8 py-4">
               {/* Left Bust */}
               <div
@@ -200,6 +196,17 @@ export function Home() {
               </div>
 
               <div className="flex flex-col items-center">
+                <svg
+                  className="w-full block"
+                  height="32"
+                  viewBox="0 0 400 32"
+                  preserveAspectRatio="none"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M 0 31 L 200 1 L 400 31" vectorEffect="non-scaling-stroke" />
+                </svg>
                 <div className="flex items-center justify-center gap-4 mb-3">
                   <GreekIllustration type="column" className="w-12 h-16 text-black" />
                   <h1 className="text-4xl md:text-6xl font-bold tracking-tight">THE AGORA</h1>
