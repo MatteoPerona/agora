@@ -4,6 +4,10 @@
 
 Ask any question — trivial or profound — and watch a council of great minds deliberate. The Agora runs a multi-agent simulation where each persona is an independent LLM agent that forms opinions, takes stances, and argues from its own perspective. You get real stance tracking, round-by-round trajectory charts, and a synthesized verdict at the end.
 
+## Live site
+
+[https://agora-lvao3a.fly.dev/](https://agora-lvao3a.fly.dev/)
+
 ![Agora screenshot](docs/screenshot.png)
 
 ## What it does
