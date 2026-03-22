@@ -3,21 +3,17 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 import logging
 import random
-from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
 
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from ..config import Settings
 from ..models import (
     ContributionPayload,
     CreateSessionRequest,
-    DecisionBrief,
     DecisionBriefPayload,
-    DecisionFrame,
-    Message,
     NetworkEdge,
     Persona,
     PersonaStance,
@@ -29,7 +25,7 @@ from ..models import (
     UserReasoningProfile,
 )
 from ..repository import AppRepository, message_from_entity, persona_from_entity
-from ..services.panel import extract_decision_frame, stance_label, tokenize
+from ..services.panel import extract_decision_frame, stance_label
 from .prompts import (
     ROUND_CUES,
     build_brief_prompt,
@@ -39,7 +35,11 @@ from .prompts import (
     build_round_stance_prompt,
 )
 from .provider import SimulationProviderFactory, StructuredLLMClient, _extract_json_payload
-from .runtime import OasisDeliberationRuntime
+
+try:
+    from .runtime import OasisDeliberationRuntime
+except ImportError:
+    OasisDeliberationRuntime = None
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -86,47 +86,24 @@ class SimulationService:
         )
         self.repository.increment_persona_usage(request.persona_ids)
 
-        runtime = OasisDeliberationRuntime(
-            provider_factory=self.provider_factory,
-            decision=request.decision,
-            personas=[(participant.agent_id, persona_from_entity(participant.persona)) for participant in simulation.participants],
-            document_context=document_context,
-            db_path=oasis_db_path,
-        )
-        await runtime.start_new()
-        try:
-            group_id = await runtime.create_room("Deliberation Room")
-            self.repository.set_group_id(simulation_id, group_id)
-
-            opening_text = build_opening_system_message(request.decision, frame.model_dump(), document_names)
-            await runtime.send_moderator_message(group_id=group_id, content=opening_text)
-            self.repository.add_message(
+        if self._should_use_local_stub_runtime():
+            await self._create_stub_session(
                 simulation_id=simulation_id,
-                author_id="orchestrator",
-                author_name="Deliberation Engine",
-                avatar_emoji="🛰️",
-                role="system",
-                round_index=0,
-                cue="frame",
-                content=opening_text,
+                simulation=simulation,
+                request=request,
+                frame=frame.model_dump(),
+                document_context=document_context,
+                document_names=document_names,
             )
-
-            for participant in simulation.participants:
-                prompt = build_initial_stance_prompt(decision=request.decision, document_context=document_context)
-                payload = self._parse_agent_payload(
-                    raw_payload=await runtime.interview(agent_id=participant.agent_id, prompt=prompt),
-                    schema=StanceInterviewPayload,
-                )
-                self.repository.set_participant_state(
-                    simulation_id=simulation_id,
-                    persona_id=participant.persona_id,
-                    stance=payload.stance,
-                    confidence=payload.confidence,
-                    rationale=payload.rationale,
-                    round_index=0,
-                )
-        finally:
-            await runtime.close()
+        else:
+            await self._create_oasis_session(
+                simulation_id=simulation_id,
+                simulation=simulation,
+                request=request,
+                frame=frame.model_dump(),
+                document_context=document_context,
+                document_names=document_names,
+            )
 
         self.session.commit()
         logger.info("Simulation %s created successfully.", simulation_id)
@@ -217,96 +194,22 @@ class SimulationService:
         logger.info("Advancing simulation %s to round %d (%s).", simulation_id, next_round, cue)
         self.repository.create_round(simulation_id, next_round, cue)
 
-        runtime = OasisDeliberationRuntime(
-            provider_factory=self.provider_factory,
-            decision=simulation.decision,
-            personas=[(participant.agent_id, persona_from_entity(participant.persona)) for participant in simulation.participants],
-            document_context="\n\n".join(documents),
-            db_path=simulation.oasis_db_path,
-        )
-        await runtime.attach_existing()
-        try:
-            group_id = simulation.oasis_group_id
-            if group_id is None:
-                raise RuntimeError("Simulation OASIS group is not initialized.")
-
-            for event in self.repository.get_pending_interjections(simulation_id):
-                content = str(event.payload_json["content"])
-                await runtime.send_moderator_message(group_id=group_id, content=f"User interjection: {content}")
-                self.repository.mark_interjection_processed(event.id)
-
-            await runtime.send_moderator_message(group_id=group_id, content=f"Round {next_round}: {cue}. Each persona should contribute one concise message.")
-
-            speaking_order = list(simulation.participants)
-            random.shuffle(speaking_order)
-
-            for participant in speaking_order:
-                room_context = await runtime.room_context(agent_id=participant.agent_id)
-                contribution_prompt = build_contribution_prompt(
-                    persona=participant.persona,
-                    decision=simulation.decision,
-                    round_index=next_round,
-                    cue=cue,
-                    room_context=room_context,
-                    document_context="\n\n".join(documents),
-                )
-                payload = self._parse_agent_payload(
-                    raw_payload=await runtime.interview(
-                        agent_id=participant.agent_id,
-                        prompt=contribution_prompt,
-                    ),
-                    schema=ContributionPayload,
-                )
-                await runtime.send_participant_message(
-                    agent_id=participant.agent_id,
-                    group_id=group_id,
-                    content=payload.message,
-                )
-                self.repository.add_message(
-                    simulation_id=simulation_id,
-                    author_id=participant.persona.id,
-                    author_name=participant.persona.name,
-                    avatar_emoji=participant.persona.avatar_emoji,
-                    role="persona",
-                    round_index=next_round,
-                    cue=cue,
-                    content=payload.message,
-                    stance=payload.stance,
-                    confidence=payload.confidence,
-                )
-
-            for participant in simulation.participants:
-                room_context = await runtime.room_context(agent_id=participant.agent_id)
-                stance_prompt = build_round_stance_prompt(
-                    decision=simulation.decision,
-                    round_index=next_round,
-                    cue=cue,
-                    room_context=room_context,
-                    document_context="\n\n".join(documents),
-                )
-                payload = self._parse_agent_payload(
-                    raw_payload=await runtime.interview(agent_id=participant.agent_id, prompt=stance_prompt),
-                    schema=StanceInterviewPayload,
-                )
-                self.repository.set_participant_state(
-                    simulation_id=simulation_id,
-                    persona_id=participant.persona_id,
-                    stance=payload.stance,
-                    confidence=payload.confidence,
-                    rationale=payload.rationale,
-                    round_index=next_round,
-                )
-                self.repository.update_message_metrics(
-                    simulation_id=simulation_id,
-                    author_id=participant.persona.id,
-                    round_index=next_round,
-                    stance=payload.stance,
-                    confidence=payload.confidence,
-                )
-
-            self.repository.complete_round(simulation_id, next_round)
-        finally:
-            await runtime.close()
+        if self._should_use_local_stub_runtime():
+            await self._advance_stub_session(
+                simulation_id=simulation_id,
+                simulation=simulation,
+                next_round=next_round,
+                cue=cue,
+                documents=documents,
+            )
+        else:
+            await self._advance_oasis_session(
+                simulation_id=simulation_id,
+                simulation=simulation,
+                next_round=next_round,
+                cue=cue,
+                documents=documents,
+            )
 
         if next_round >= simulation.round_goal:
             logger.info("Simulation %s reached round goal, finalizing brief.", simulation_id)
@@ -454,3 +357,309 @@ class SimulationService:
     @staticmethod
     def _parse_agent_payload(raw_payload: str, schema: type[T]) -> T:
         return schema.model_validate(_extract_json_payload(raw_payload))
+
+    def _should_use_local_stub_runtime(self) -> bool:
+        return self.settings.normalized_provider == "stub" and OasisDeliberationRuntime is None
+
+    async def _create_stub_session(
+        self,
+        *,
+        simulation_id: str,
+        simulation,
+        request: CreateSessionRequest,
+        frame: dict[str, Any],
+        document_context: str,
+        document_names: list[str],
+    ) -> None:
+        opening_text = build_opening_system_message(request.decision, frame, document_names)
+        self.repository.add_message(
+            simulation_id=simulation_id,
+            author_id="orchestrator",
+            author_name="Deliberation Engine",
+            avatar_emoji="🛰️",
+            role="system",
+            round_index=0,
+            cue="frame",
+            content=opening_text,
+        )
+
+        client = StructuredLLMClient(self.provider_factory.create_agent_backend())
+        for participant in simulation.participants:
+            persona = persona_from_entity(participant.persona)
+            payload = await client.generate_json(
+                system_prompt=self._persona_system_prompt(persona, request.decision, document_context),
+                user_prompt=build_initial_stance_prompt(
+                    decision=request.decision,
+                    document_context=document_context,
+                ),
+                schema=StanceInterviewPayload,
+            )
+            self.repository.set_participant_state(
+                simulation_id=simulation_id,
+                persona_id=participant.persona_id,
+                stance=payload.stance,
+                confidence=payload.confidence,
+                rationale=payload.rationale,
+                round_index=0,
+            )
+
+    async def _create_oasis_session(
+        self,
+        *,
+        simulation_id: str,
+        simulation,
+        request: CreateSessionRequest,
+        frame: dict[str, Any],
+        document_context: str,
+        document_names: list[str],
+    ) -> None:
+        if OasisDeliberationRuntime is None:
+            raise RuntimeError("OASIS runtime is unavailable in this environment.")
+
+        runtime = OasisDeliberationRuntime(
+            provider_factory=self.provider_factory,
+            decision=request.decision,
+            personas=[(participant.agent_id, persona_from_entity(participant.persona)) for participant in simulation.participants],
+            document_context=document_context,
+            db_path=simulation.oasis_db_path,
+        )
+        await runtime.start_new()
+        try:
+            group_id = await runtime.create_room("Deliberation Room")
+            self.repository.set_group_id(simulation_id, group_id)
+
+            opening_text = build_opening_system_message(request.decision, frame, document_names)
+            await runtime.send_moderator_message(group_id=group_id, content=opening_text)
+            self.repository.add_message(
+                simulation_id=simulation_id,
+                author_id="orchestrator",
+                author_name="Deliberation Engine",
+                avatar_emoji="🛰️",
+                role="system",
+                round_index=0,
+                cue="frame",
+                content=opening_text,
+            )
+
+            for participant in simulation.participants:
+                prompt = build_initial_stance_prompt(decision=request.decision, document_context=document_context)
+                payload = self._parse_agent_payload(
+                    raw_payload=await runtime.interview(agent_id=participant.agent_id, prompt=prompt),
+                    schema=StanceInterviewPayload,
+                )
+                self.repository.set_participant_state(
+                    simulation_id=simulation_id,
+                    persona_id=participant.persona_id,
+                    stance=payload.stance,
+                    confidence=payload.confidence,
+                    rationale=payload.rationale,
+                    round_index=0,
+                )
+        finally:
+            await runtime.close()
+
+    async def _advance_stub_session(
+        self,
+        *,
+        simulation_id: str,
+        simulation,
+        next_round: int,
+        cue: str,
+        documents: list[str],
+    ) -> None:
+        document_context = "\n\n".join(documents)
+        client = StructuredLLMClient(self.provider_factory.create_agent_backend())
+
+        for event in self.repository.get_pending_interjections(simulation_id):
+            self.repository.mark_interjection_processed(event.id)
+
+        speaking_order = list(simulation.participants)
+        random.shuffle(speaking_order)
+
+        for participant in speaking_order:
+            persona = persona_from_entity(participant.persona)
+            contribution_prompt = build_contribution_prompt(
+                persona=persona,
+                decision=simulation.decision,
+                round_index=next_round,
+                cue=cue,
+                room_context=self._room_context(simulation_id),
+                document_context=document_context,
+            )
+            payload = await client.generate_json(
+                system_prompt=self._persona_system_prompt(persona, simulation.decision, document_context),
+                user_prompt=contribution_prompt,
+                schema=ContributionPayload,
+            )
+            self.repository.add_message(
+                simulation_id=simulation_id,
+                author_id=persona.id,
+                author_name=persona.name,
+                avatar_emoji=persona.avatar_emoji,
+                role="persona",
+                round_index=next_round,
+                cue=cue,
+                content=payload.message,
+                stance=payload.stance,
+                confidence=payload.confidence,
+            )
+
+        for participant in simulation.participants:
+            persona = persona_from_entity(participant.persona)
+            stance_prompt = build_round_stance_prompt(
+                decision=simulation.decision,
+                round_index=next_round,
+                cue=cue,
+                room_context=self._room_context(simulation_id),
+                document_context=document_context,
+            )
+            payload = await client.generate_json(
+                system_prompt=self._persona_system_prompt(persona, simulation.decision, document_context),
+                user_prompt=stance_prompt,
+                schema=StanceInterviewPayload,
+            )
+            self.repository.set_participant_state(
+                simulation_id=simulation_id,
+                persona_id=participant.persona_id,
+                stance=payload.stance,
+                confidence=payload.confidence,
+                rationale=payload.rationale,
+                round_index=next_round,
+            )
+            self.repository.update_message_metrics(
+                simulation_id=simulation_id,
+                author_id=persona.id,
+                round_index=next_round,
+                stance=payload.stance,
+                confidence=payload.confidence,
+            )
+
+        self.repository.complete_round(simulation_id, next_round)
+
+    async def _advance_oasis_session(
+        self,
+        *,
+        simulation_id: str,
+        simulation,
+        next_round: int,
+        cue: str,
+        documents: list[str],
+    ) -> None:
+        if OasisDeliberationRuntime is None:
+            raise RuntimeError("OASIS runtime is unavailable in this environment.")
+
+        runtime = OasisDeliberationRuntime(
+            provider_factory=self.provider_factory,
+            decision=simulation.decision,
+            personas=[(participant.agent_id, persona_from_entity(participant.persona)) for participant in simulation.participants],
+            document_context="\n\n".join(documents),
+            db_path=simulation.oasis_db_path,
+        )
+        await runtime.attach_existing()
+        try:
+            group_id = simulation.oasis_group_id
+            if group_id is None:
+                raise RuntimeError("Simulation OASIS group is not initialized.")
+
+            for event in self.repository.get_pending_interjections(simulation_id):
+                content = str(event.payload_json["content"])
+                await runtime.send_moderator_message(group_id=group_id, content=f"User interjection: {content}")
+                self.repository.mark_interjection_processed(event.id)
+
+            await runtime.send_moderator_message(group_id=group_id, content=f"Round {next_round}: {cue}. Each persona should contribute one concise message.")
+
+            speaking_order = list(simulation.participants)
+            random.shuffle(speaking_order)
+
+            for participant in speaking_order:
+                room_context = await runtime.room_context(agent_id=participant.agent_id)
+                contribution_prompt = build_contribution_prompt(
+                    persona=participant.persona,
+                    decision=simulation.decision,
+                    round_index=next_round,
+                    cue=cue,
+                    room_context=room_context,
+                    document_context="\n\n".join(documents),
+                )
+                payload = self._parse_agent_payload(
+                    raw_payload=await runtime.interview(
+                        agent_id=participant.agent_id,
+                        prompt=contribution_prompt,
+                    ),
+                    schema=ContributionPayload,
+                )
+                await runtime.send_participant_message(
+                    agent_id=participant.agent_id,
+                    group_id=group_id,
+                    content=payload.message,
+                )
+                self.repository.add_message(
+                    simulation_id=simulation_id,
+                    author_id=participant.persona.id,
+                    author_name=participant.persona.name,
+                    avatar_emoji=participant.persona.avatar_emoji,
+                    role="persona",
+                    round_index=next_round,
+                    cue=cue,
+                    content=payload.message,
+                    stance=payload.stance,
+                    confidence=payload.confidence,
+                )
+
+            for participant in simulation.participants:
+                room_context = await runtime.room_context(agent_id=participant.agent_id)
+                stance_prompt = build_round_stance_prompt(
+                    decision=simulation.decision,
+                    round_index=next_round,
+                    cue=cue,
+                    room_context=room_context,
+                    document_context="\n\n".join(documents),
+                )
+                payload = self._parse_agent_payload(
+                    raw_payload=await runtime.interview(agent_id=participant.agent_id, prompt=stance_prompt),
+                    schema=StanceInterviewPayload,
+                )
+                self.repository.set_participant_state(
+                    simulation_id=simulation_id,
+                    persona_id=participant.persona_id,
+                    stance=payload.stance,
+                    confidence=payload.confidence,
+                    rationale=payload.rationale,
+                    round_index=next_round,
+                )
+                self.repository.update_message_metrics(
+                    simulation_id=simulation_id,
+                    author_id=participant.persona.id,
+                    round_index=next_round,
+                    stance=payload.stance,
+                    confidence=payload.confidence,
+                )
+
+            self.repository.complete_round(simulation_id, next_round)
+        finally:
+            await runtime.close()
+
+    def _room_context(self, simulation_id: str) -> str:
+        simulation = self.repository.get_simulation(simulation_id)
+        if not simulation.messages:
+            return "The room is quiet so far."
+        lines = []
+        for message in simulation.messages[-20:]:
+            speaker = "System" if message.role == "system" else message.author_name
+            lines.append(f"{speaker}: {message.content}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _persona_system_prompt(persona: Persona, decision: str, document_context: str) -> str:
+        biases = ", ".join(f"{bias.type} ({bias.strength})" for bias in persona.cognitive_biases) or "None"
+        return (
+            f"Persona name: {persona.name}\n"
+            f"Persona summary: {persona.summary}\n"
+            f"Identity anchor: {persona.identity_anchor}\n"
+            f"Epistemic style: {persona.epistemic_style}\n"
+            f"Argumentative voice: {persona.argumentative_voice}\n"
+            f"Cognitive biases: {biases}\n"
+            f"Decision: {decision}\n"
+            f"Relevant document context:\n{document_context or 'No documents attached.'}\n"
+            "Stay in character. Never address the user directly. Never use em dashes."
+        )

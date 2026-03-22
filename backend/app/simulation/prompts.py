@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from textwrap import dedent
 
-from camel.prompts import TextPrompt
+try:
+    from camel.prompts import TextPrompt
+except ImportError:
+    def TextPrompt(value: str) -> str:
+        return value
 
 from ..models import DecisionBriefPayload, Persona
 

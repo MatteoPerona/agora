@@ -4,6 +4,7 @@ import { BrutalistButton } from "../components/BrutalistButton";
 import { BrutalistCard } from "../components/BrutalistCard";
 import { PhilosopherIcon } from "../components/PhilosopherIcon";
 import { DebateArena } from "../components/DebateArena";
+import { InteractionBloomGraph } from "../components/InteractionBloomGraph";
 import {
   ArrowLeft,
   TrendingUp,
@@ -390,13 +391,14 @@ export function Debate() {
 
             {/* GRAPH VIEW */}
             {viewMode === "graph" && (
-              <div
-                className="border-4 border-black bg-white flex flex-col items-center justify-center"
-                style={{ minHeight: 400 }}
-              >
-                <GitFork className="w-10 h-10 opacity-20 mb-3" />
-                <p className="text-sm font-mono opacity-40">Interaction graph — coming soon</p>
-              </div>
+              <InteractionBloomGraph
+                roster={liveRoster}
+                messages={displayMessages}
+                networkEdges={snapshot?.network_edges ?? []}
+                trajectories={snapshot?.trajectories ?? []}
+                currentRound={snapshot?.current_round ?? 0}
+                roundGoal={snapshot?.round_goal ?? 0}
+              />
             )}
 
             {error && (
