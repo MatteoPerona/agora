@@ -1,24 +1,23 @@
-app = "agora"
-primary_region = "iad"
+# fly.toml app configuration file generated for agora-lvao3a on 2026-03-22T18:38:03Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'agora-lvao3a'
+primary_region = 'ams'
 
 [build]
-  dockerfile = "Dockerfile"
-
-[env]
-  APP_DATABASE_URL = "sqlite:////app/data/agora.sqlite3"
-  UPLOADS_DIR = "/app/data/uploads"
-  SIMULATIONS_DIR = "/app/data/simulations"
-  # Optional defaults for first-time deployment:
-  # Set these to your preferred provider after deploy.
-  SIM_PROVIDER = "stub"
-  SIM_MODEL = "stub"
-
-[[mounts]]
-  source = "agora-data"
-  destination = "/app/data"
 
 [http_service]
-  internal_port = 8000
+  internal_port = 8080
   force_https = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
-  auto_stop_machines = false
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256
