@@ -312,30 +312,37 @@ sequenceDiagram
 
 ## Frontend Integration
 
-The frontend communicates through [frontend/src/lib/api.ts](/Users/matteoperona/Projects/agora/frontend/src/lib/api.ts).
+The frontend communicates through [frontend/src/app/lib/api.ts](/Users/matteoperona/Projects/agora/frontend/src/app/lib/api.ts).
 
 Current route mapping:
 
-- `/start`
+- `/`
   Uses:
   - `POST /api/documents`
   - `DELETE /api/documents/{id}`
 
-- `/personas`
+- `/summon`
   Uses:
   - `GET /api/personas`
-  - `GET /api/profile`
   - `POST /api/panel/recommend`
+  - `POST /api/personas/random`
+  - `POST /api/personas/expand`
+  - `POST /api/personas`
+  - `PATCH /api/personas/{id}`
+  - `DELETE /api/personas/{id}`
   - `POST /api/sessions`
 
-- `/simulation/:sessionId`
+- `/debate/:debateId`
   Uses:
-  - `GET /api/sessions/{id}`
   - `POST /api/sessions/{id}/advance`
   - `POST /api/sessions/{id}/interjections`
   - `POST /api/sessions/{id}/finish`
 
-There is also an additive SSE endpoint:
+- `/verdict/:debateId`
+  Uses:
+  - `GET /api/sessions/{id}`
+
+There is also an additive SSE endpoint that the current frontend does not consume yet:
 
 - `GET /api/sessions/{id}/events`
 
@@ -452,4 +459,3 @@ If you want to understand the backend from top to bottom, read in this order:
 7. [simulation/provider.py](/Users/matteoperona/Projects/agora/backend/app/simulation/provider.py)
 8. [services/selection.py](/Users/matteoperona/Projects/agora/backend/app/services/selection.py)
 9. [services/documents.py](/Users/matteoperona/Projects/agora/backend/app/services/documents.py)
-

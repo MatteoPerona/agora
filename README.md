@@ -59,7 +59,7 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ### 2. Frontend
 
 ```bash
-cd "Agora Debate Design System"
+cd frontend
 npm install
 npm run dev
 ```
@@ -94,7 +94,7 @@ agora/
 │       ├── repository.py     # Data access layer
 │       ├── services/         # Panel selection, persona expansion, documents
 │       └── simulation/       # OASIS runtime, LLM provider abstraction, prompts
-└── Agora Debate Design System/
+└── frontend/
     └── src/app/
         ├── pages/            # Home, SummonCouncil, Debate, Verdict
         ├── components/       # BrutalistButton, BrutalistCard, DebateArena, DesktopPet
@@ -107,4 +107,4 @@ agora/
 - The Arena view uses pixel-art sprites from `public/pixelart/`. Each philosopher folder contains directional sprites (`rotations/south.png`, `east.png`, `west.png`).
 - The frontend proxies API calls to `http://localhost:8000` via Vite config.
 - Run backend tests: `pytest backend/tests -q`
-- Type-check frontend: `npx tsc --noEmit` (from the `Agora Debate Design System/` directory)
+- Build frontend: `npm run build` (from the `frontend/` directory)

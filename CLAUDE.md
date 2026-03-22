@@ -20,7 +20,7 @@ agora/
 │       ├── repository.py            # Data access layer
 │       ├── services/                # Business logic (panel, personas, docs, debate)
 │       └── simulation/              # OASIS/CAMEL runtime, provider abstraction
-└── Agora Debate Design System/      # React + Vite + Tailwind frontend
+└── frontend/                        # React + Vite + Tailwind frontend
     └── src/app/
         ├── pages/                   # Home, SummonCouncil, Debate, Verdict
         ├── components/              # BrutalistButton, BrutalistCard, ui/ (Shadcn)
@@ -50,12 +50,11 @@ pytest backend/tests/test_simulation_flow.py -q
 ### Frontend
 
 ```bash
-cd "Agora Debate Design System"
+cd frontend
 
 npm install
 npm run dev      # Dev server on port 5173
 npm run build    # Production build
-npx tsc          # Type-check only
 ```
 
 ## Backend Architecture
