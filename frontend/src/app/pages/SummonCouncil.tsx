@@ -17,6 +17,7 @@ import {
   ChevronUp,
   Pencil,
   Trash2,
+  KeyRound,
 } from "lucide-react";
 import {
   getPersonas,
@@ -27,6 +28,9 @@ import {
   updatePersona,
   deletePersona,
   createSession,
+  getRuntimeConfig as fetchRuntimeConfig,
+  setRuntimeConfig as saveRuntimeConfig,
+  clearRuntimeConfig as clearRuntimeConfigRequest,
 } from "../lib/api";
 import type { Persona, PanelRecommendationResponse } from "../lib/types";
 import { PHILOSOPHERS } from "../data/philosophers";
@@ -94,6 +98,20 @@ export function SummonCouncil() {
   // Session creation
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [showRuntimeConfig, setShowRuntimeConfig] = useState(false);
+  const [runtimeConfig, setRuntimeConfig] = useState({
+    provider: "stub",
+    model: "stub",
+    selector_model: "",
+    summary_model: "",
+    base_url: "",
+    api_key: "",
+    api_key_set: false,
+    source: "default" as "default" | "session",
+  });
+  const [runtimeNotice, setRuntimeNotice] = useState<string | null>(null);
+  const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(false);
+  const [runtimeConfigError, setRuntimeConfigError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!question) {
@@ -101,11 +119,57 @@ export function SummonCouncil() {
       return;
     }
     setLoadingPersonas(true);
-    getPersonas()
-      .then((p) => setPersonas(p))
-      .catch((e) => setPersonasError(e.message))
+    Promise.allSettled([getPersonas(), fetchRuntimeConfig()])
+      .then(([personasResult, runtimeResult]) => {
+        if (personasResult.status === "fulfilled") {
+          setPersonas(personasResult.value);
+          setPersonasError(null);
+        } else {
+          setPersonasError(
+            personasResult.reason instanceof Error ? personasResult.reason.message : "Failed to load personas"
+          );
+        }
+
+        if (runtimeResult.status === "fulfilled") {
+          const runtime = runtimeResult.value;
+          setRuntimeConfig({
+            provider: runtime.provider,
+            model: runtime.model,
+            selector_model: runtime.selector_model || "",
+            summary_model: runtime.summary_model || "",
+            base_url: runtime.base_url || "",
+            api_key: "",
+            api_key_set: runtime.api_key_set,
+            source: runtime.source,
+          });
+          setRuntimeConfigError(null);
+        } else {
+          setRuntimeConfigError(
+            runtimeResult.reason instanceof Error ? runtimeResult.reason.message : "Failed to load runtime config"
+          );
+        }
+      })
       .finally(() => setLoadingPersonas(false));
   }, []);
+
+  const refreshRuntimeConfig = async () => {
+    try {
+      const runtime = await fetchRuntimeConfig();
+      setRuntimeConfig({
+        provider: runtime.provider,
+        model: runtime.model,
+        selector_model: runtime.selector_model || "",
+        summary_model: runtime.summary_model || "",
+        base_url: runtime.base_url || "",
+        api_key: "",
+        api_key_set: runtime.api_key_set,
+        source: runtime.source,
+      });
+      setRuntimeConfigError(null);
+    } catch (e) {
+      setRuntimeConfigError(e instanceof Error ? e.message : "Failed to load runtime config");
+    }
+  };
 
   const togglePersona = (id: string) => {
     setSelectedIds((prev) =>
@@ -288,6 +352,43 @@ export function SummonCouncil() {
     }
   };
 
+  const handleSaveRuntimeConfig = async () => {
+    setRuntimeConfigLoading(true);
+    setRuntimeConfigError(null);
+    setRuntimeNotice(null);
+    try {
+      await saveRuntimeConfig({
+        provider: (runtimeConfig.provider || "stub").trim(),
+        model: (runtimeConfig.model || "stub").trim(),
+        selector_model: runtimeConfig.selector_model.trim() || null,
+        summary_model: runtimeConfig.summary_model.trim() || null,
+        base_url: runtimeConfig.base_url.trim() || null,
+        api_key: runtimeConfig.api_key.trim() || undefined,
+      });
+      await refreshRuntimeConfig();
+      setRuntimeNotice("Runtime configuration saved for this browser session.");
+    } catch (e) {
+      setRuntimeConfigError(`Failed to save config: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setRuntimeConfigLoading(false);
+    }
+  };
+
+  const handleClearRuntimeConfig = async () => {
+    setRuntimeConfigLoading(true);
+    setRuntimeConfigError(null);
+    setRuntimeNotice(null);
+    try {
+      await clearRuntimeConfigRequest();
+      await refreshRuntimeConfig();
+      setRuntimeNotice("Reverted to server defaults for this session.");
+    } catch (e) {
+      setRuntimeConfigError(`Failed to clear config: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setRuntimeConfigLoading(false);
+    }
+  };
+
   // Group personas: philosophers first (known IDs), then custom
   const philosopherPersonas = personas
     .filter((p) => PHILOSOPHER_META[p.id])
@@ -356,8 +457,121 @@ export function SummonCouncil() {
               <Settings className="w-4 h-4 mr-2" />
               Parameters
             </BrutalistButton>
+            <BrutalistButton
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowRuntimeConfig((current) => !current)}
+            >
+              <KeyRound className="w-4 h-4 mr-2" />
+              API Provider
+            </BrutalistButton>
           </div>
         </div>
+
+        {runtimeConfigError && (
+          <BrutalistCard className="p-4 mb-4 border-red-400 bg-red-50 text-red-700">
+            <p className="text-sm">Runtime config issue: {runtimeConfigError}</p>
+          </BrutalistCard>
+        )}
+        {runtimeNotice && (
+          <BrutalistCard className="p-4 mb-4 border-green-500 bg-green-50 text-green-800">
+            <p className="text-sm">{runtimeNotice}</p>
+          </BrutalistCard>
+        )}
+
+        {showRuntimeConfig && (
+          <BrutalistCard className="p-6 mb-6">
+            <h3 className="mb-4 font-semibold">Runtime LLM settings</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This is your local browser session only. Keys are sent to the backend and never returned.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-black/60 block mb-1">Provider</label>
+                <select
+                  value={runtimeConfig.provider}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, provider: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                >
+                  <option value="stub">stub</option>
+                  <option value="anthropic">anthropic</option>
+                  <option value="openai-compatible-model">openai-compatible-model</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-black/60 block mb-1">Model</label>
+                <input
+                  value={runtimeConfig.model}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, model: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-black/60 block mb-1">Selector model (optional)</label>
+                <input
+                  value={runtimeConfig.selector_model}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, selector_model: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                  placeholder="Leave empty to use default"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-black/60 block mb-1">Summary model (optional)</label>
+                <input
+                  value={runtimeConfig.summary_model}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, summary_model: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                  placeholder="Leave empty to use default"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-black/60 block mb-1">OpenAI-compatible base URL (optional)</label>
+                <input
+                  value={runtimeConfig.base_url}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, base_url: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                  placeholder="e.g. https://api.openai.com/v1"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-black/60 block mb-1">API key</label>
+                <input
+                  type="password"
+                  value={runtimeConfig.api_key}
+                  onChange={(e) => setRuntimeConfig((prev) => ({ ...prev, api_key: e.target.value }))}
+                  className="w-full border-2 border-black p-2 bg-white"
+                  placeholder={runtimeConfig.api_key_set ? "Stored key exists for this session" : "Enter API key"}
+                />
+                <p className="text-xs text-black/50 mt-1">
+                  Current status: {runtimeConfig.source === "session" ? "Session override" : "Server defaults"}.
+                  {runtimeConfig.api_key_set ? " API key is configured." : " No API key configured."}
+                </p>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <BrutalistButton
+                  size="sm"
+                  variant="accent"
+                  onClick={handleSaveRuntimeConfig}
+                  disabled={runtimeConfigLoading}
+                >
+                  {runtimeConfigLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                  ) : (
+                    "Save session config"
+                  )}
+                </BrutalistButton>
+                <BrutalistButton
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleClearRuntimeConfig}
+                  disabled={runtimeConfigLoading}
+                >
+                  Clear session override
+                </BrutalistButton>
+              </div>
+            </div>
+          </BrutalistCard>
+        )}
 
         {/* AI Recommendation Banner */}
         {showRecommendation && recommendation && (

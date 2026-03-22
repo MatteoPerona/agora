@@ -6,7 +6,7 @@ import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -20,6 +20,8 @@ from .models import (
     ExpandPersonaRequest,
     PanelRecommendationResponse,
     RecommendPanelRequest,
+    RuntimeLLMConfig,
+    RuntimeLLMConfigResponse,
     SessionSnapshot,
     UpdatePersonaRequest,
     UploadedDocument,
@@ -33,6 +35,13 @@ from .services.selection import select_panel
 from .simulation.prompts import build_expand_persona_prompt
 from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
 from .simulation.service import SimulationService
+from .runtime_config import (
+    build_effective_settings,
+    clear_runtime_config as clear_session_runtime_config,
+    get_runtime_config as get_session_runtime_config,
+    get_session_id,
+    set_runtime_config as set_session_runtime_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,15 +75,105 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "message": "Perspective Engine API is running. Start frontend at http://127.0.0.1:5173",
+    }
+
+
 def get_repository(session: Session = Depends(get_db_session)) -> AppRepository:
     return AppRepository(session)
 
 
+def get_runtime_settings(
+    request: Request,
+    response: Response,
+    settings: Settings = Depends(get_settings),
+) -> Settings:
+    session_id = get_session_id(request, response)
+    return build_effective_settings(settings, get_session_runtime_config(session_id))
+
+
 def get_simulation_service(
     session: Session = Depends(get_db_session),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> SimulationService:
     return SimulationService(session, settings)
+
+
+@app.get("/api/runtime/config", response_model=RuntimeLLMConfigResponse)
+def runtime_config_status(
+    request: Request,
+    response: Response,
+    settings: Settings = Depends(get_settings),
+) -> RuntimeLLMConfigResponse:
+    session_id = get_session_id(request, response)
+    runtime_settings = get_session_runtime_config(session_id)
+    resolved = build_effective_settings(settings, runtime_settings)
+    return RuntimeLLMConfigResponse(
+        provider=resolved.sim_provider,
+        model=resolved.sim_model,
+        selector_model=resolved.sim_selector_model,
+        summary_model=resolved.sim_summary_model,
+        base_url=resolved.sim_base_url,
+        api_key_set=bool(resolved.sim_api_key),
+        source="session" if runtime_settings else "default",
+    )
+
+
+@app.post("/api/runtime/config", response_model=RuntimeLLMConfigResponse)
+def set_runtime_config(
+    request: Request,
+    response: Response,
+    payload: RuntimeLLMConfig,
+    settings: Settings = Depends(get_settings),
+) -> RuntimeLLMConfigResponse:
+    session_id = get_session_id(request, response)
+    try:
+        resolved = build_effective_settings(
+            settings,
+            RuntimeLLMConfig(
+                provider=(payload.provider or "").strip() or "stub",
+                model=(payload.model or "").strip() or "stub",
+                selector_model=payload.selector_model,
+                summary_model=payload.summary_model,
+                base_url=payload.base_url,
+                api_key=payload.api_key,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid runtime config: {exc}")
+
+    set_session_runtime_config(
+        session_id,
+        RuntimeLLMConfig(
+            provider=resolved.normalized_provider,
+            model=resolved.sim_model,
+            selector_model=resolved.sim_selector_model,
+            summary_model=resolved.sim_summary_model,
+            base_url=resolved.sim_base_url or "",
+            api_key=resolved.sim_api_key,
+        ),
+    )
+
+    return RuntimeLLMConfigResponse(
+        provider=resolved.sim_provider,
+        model=resolved.sim_model,
+        selector_model=resolved.sim_selector_model,
+        summary_model=resolved.sim_summary_model,
+        base_url=resolved.sim_base_url,
+        api_key_set=bool(resolved.sim_api_key),
+        source="session",
+    )
+
+
+@app.delete("/api/runtime/config")
+def clear_runtime_config(request: Request, response: Response) -> None:
+    session_id = get_session_id(request, response)
+    clear_session_runtime_config(session_id)
+    return None
 
 
 @app.get("/health")
@@ -142,7 +241,7 @@ _RANDOM_SEEDS = [
 
 
 @app.post("/api/personas/random")
-async def random_persona(settings: Settings = Depends(get_settings)) -> dict:
+async def random_persona(settings: Settings = Depends(get_runtime_settings)) -> dict:
     seed = random.choice(_RANDOM_SEEDS)
     if settings.normalized_provider != "stub":
         try:
@@ -172,7 +271,7 @@ def remove_persona(persona_id: str, repository: AppRepository = Depends(get_repo
 @app.post("/api/personas/expand")
 async def expand_persona(
     request: ExpandPersonaRequest,
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> dict:
     # Use the real LLM when a provider is configured; otherwise use the fast heuristic fallback.
     if settings.normalized_provider != "stub":
@@ -219,7 +318,7 @@ def update_persona(
 async def panel_recommendation(
     request: RecommendPanelRequest,
     repository: AppRepository = Depends(get_repository),
-    settings: Settings = Depends(get_settings),
+    settings: Settings = Depends(get_runtime_settings),
 ) -> PanelRecommendationResponse:
     documents = repository.get_documents(request.document_ids)
     if len(documents) != len(request.document_ids):

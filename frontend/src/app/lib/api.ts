@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(path, options);
+  const res = await fetch(path, { ...options, credentials: "include" });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -23,6 +23,35 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function getPersonas(): Promise<Persona[]> {
   return req<Persona[]>("/api/personas");
+}
+
+export interface RuntimeConfigPayload {
+  provider: string;
+  model: string;
+  selector_model: string | null;
+  summary_model: string | null;
+  base_url: string | null;
+}
+
+export interface RuntimeConfig extends RuntimeConfigPayload {
+  api_key_set: boolean;
+  source: "default" | "session";
+}
+
+export async function getRuntimeConfig(): Promise<RuntimeConfig> {
+  return req<RuntimeConfig>("/api/runtime/config");
+}
+
+export async function setRuntimeConfig(payload: RuntimeConfigPayload & { api_key?: string }): Promise<RuntimeConfig> {
+  return req<RuntimeConfig>("/api/runtime/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clearRuntimeConfig(): Promise<void> {
+  await req("/api/runtime/config", { method: "DELETE" });
 }
 
 export async function uploadDocument(file: File): Promise<UploadedDocument> {

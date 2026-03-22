@@ -115,6 +115,25 @@ class UpdatePersonaRequest(BaseModel):
     opinion_change_threshold: Literal["LOW", "MODERATE", "HIGH"] | None = None
 
 
+class RuntimeLLMConfig(BaseModel):
+    provider: str = "stub"
+    model: str = "stub"
+    selector_model: str | None = None
+    summary_model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+class RuntimeLLMConfigResponse(BaseModel):
+    provider: str
+    model: str
+    selector_model: str | None = None
+    summary_model: str | None = None
+    base_url: str | None = None
+    api_key_set: bool
+    source: Literal["default", "session"]
+
+
 class RecommendPanelRequest(BaseModel):
     decision: str = Field(min_length=20)
     panel_size: int = Field(default=5, ge=3, le=8)
