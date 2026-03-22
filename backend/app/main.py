@@ -5,6 +5,7 @@ import asyncio
 import random
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +36,6 @@ from .services.personas import expand_natural_language_persona, slugify
 from .services.selection import select_panel
 from .simulation.prompts import build_expand_persona_prompt
 from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
-from .simulation.service import SimulationService
 from .runtime_config import (
     build_effective_settings,
     clear_runtime_config as clear_session_runtime_config,
@@ -43,6 +43,9 @@ from .runtime_config import (
     get_session_id,
     set_runtime_config as set_session_runtime_config,
 )
+
+if TYPE_CHECKING:
+    from .simulation.service import SimulationService
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +78,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 _FRONTEND_INDEX = _FRONTEND_DIST / "index.html"
 _FRONTEND_AVAILABLE = _FRONTEND_DIST.exists()
 
@@ -127,7 +130,9 @@ def get_runtime_settings(
 def get_simulation_service(
     session: Session = Depends(get_db_session),
     settings: Settings = Depends(get_runtime_settings),
-) -> SimulationService:
+) -> "SimulationService":
+    from .simulation.service import SimulationService
+
     return SimulationService(session, settings)
 
 
@@ -358,7 +363,7 @@ async def panel_recommendation(
         profile=repository.get_profile(),
         panel_size=request.panel_size,
         manual_ids=request.manual_ids,
-        provider_factory=SimulationService(repository.session, settings).provider_factory,
+        provider_factory=SimulationProviderFactory(settings),
     )
     repository.session.commit()
     return response
@@ -368,7 +373,7 @@ async def panel_recommendation(
 async def new_session(
     request: CreateSessionRequest,
     repository: AppRepository = Depends(get_repository),
-    service: SimulationService = Depends(get_simulation_service),
+    service: "SimulationService" = Depends(get_simulation_service),
 ) -> SessionSnapshot:
     personas = [repository.get_persona(persona_id) for persona_id in request.persona_ids]
     if any(persona is None for persona in personas):
@@ -386,7 +391,7 @@ async def new_session(
 
 
 @app.get("/api/sessions/{session_id}", response_model=SessionSnapshot)
-def session_snapshot(session_id: str, service: SimulationService = Depends(get_simulation_service)) -> SessionSnapshot:
+def session_snapshot(session_id: str, service: "SimulationService" = Depends(get_simulation_service)) -> SessionSnapshot:
     try:
         return service.get_snapshot(session_id)
     except ValueError:
@@ -397,7 +402,7 @@ def session_snapshot(session_id: str, service: SimulationService = Depends(get_s
 def interject(
     session_id: str,
     request: UserInterjectionRequest,
-    service: SimulationService = Depends(get_simulation_service),
+    service: "SimulationService" = Depends(get_simulation_service),
 ) -> SessionSnapshot:
     try:
         return service.add_interjection(session_id, request.content)
@@ -409,7 +414,7 @@ def interject(
 async def advance(
     session_id: str,
     repository: AppRepository = Depends(get_repository),
-    service: SimulationService = Depends(get_simulation_service),
+    service: "SimulationService" = Depends(get_simulation_service),
 ) -> SessionSnapshot:
     try:
         simulation = repository.get_simulation(session_id)
@@ -433,7 +438,7 @@ async def advance(
 async def finish(
     session_id: str,
     repository: AppRepository = Depends(get_repository),
-    service: SimulationService = Depends(get_simulation_service),
+    service: "SimulationService" = Depends(get_simulation_service),
 ) -> SessionSnapshot:
     try:
         simulation = repository.get_simulation(session_id)
@@ -464,6 +469,8 @@ async def session_events(
         idle_cycles = 0
         while idle_cycles < 30:
             with SessionLocal(settings)() as session:
+                from .simulation.service import SimulationService
+
                 service = SimulationService(session, settings)
                 try:
                     events = service.list_events(session_id, current_last)
