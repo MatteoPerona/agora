@@ -8,7 +8,8 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .bootstrap import initialize_app
@@ -74,13 +75,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+_FRONTEND_INDEX = _FRONTEND_DIST / "index.html"
+_FRONTEND_AVAILABLE = _FRONTEND_DIST.exists()
 
-@app.get("/")
-def root() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "message": "Perspective Engine API is running. Start frontend at http://127.0.0.1:5173",
-    }
+if _FRONTEND_AVAILABLE:
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIST / "assets")), name="frontend-assets")
+    
+    @app.middleware("http")
+    async def serve_frontend(request: Request, call_next):
+        response = await call_next(request)
+        if request.method != "GET":
+            return response
+        if response.status_code != 404:
+            return response
+        path = request.url.path
+        if path.startswith("/api/") or path in {"/api", "/health", "/docs", "/redoc", "/openapi.json", "/assets"}:
+            return response
+        if path.startswith("/assets/"):
+            return response
+        if path != "/":
+            candidate = _FRONTEND_DIST / path.lstrip("/")
+            if candidate.exists() and candidate.is_file():
+                return FileResponse(candidate)
+        if _FRONTEND_INDEX.exists():
+            return FileResponse(_FRONTEND_INDEX)
+        return response
+else:
+
+    @app.get("/")
+    def root() -> dict[str, str]:
+        return {
+            "status": "ok",
+            "message": "Perspective Engine API is running. Start frontend at http://127.0.0.1:5173",
+        }
 
 
 def get_repository(session: Session = Depends(get_db_session)) -> AppRepository:

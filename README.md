@@ -66,6 +66,29 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+### 3. Fly.io (single-service deploy)
+
+This repository ships with a one-service Fly setup that builds the frontend and serves it from FastAPI.
+
+```bash
+# create app (first time only)
+fly launch --name agora --no-deploy
+
+# create persistent volume for sqlite + uploads/simulations
+fly volumes create agora-data --region iad --size 1
+
+# deploy
+fly deploy
+```
+
+Env defaults are configured in `fly.toml` for a stub provider. To use a real provider, run:
+
+```bash
+fly secrets set SIM_PROVIDER=anthropic SIM_MODEL=claude-haiku-4-5-20251001 SIM_API_KEY=your_key_here
+```
+
+If you want a Postgres-backed deployment later, we can migrate the app off SQLite and use a managed DB.
+
 ## API overview
 
 | Endpoint | Description |
