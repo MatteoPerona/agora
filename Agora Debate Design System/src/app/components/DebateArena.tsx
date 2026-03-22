@@ -217,7 +217,7 @@ export function DebateArena({ roster, latestMessage }: DebateArenaProps) {
                     wordBreak: "break-word",
                   }}
                 >
-                  {bubble.displayedText}
+                  {bubble.displayedText.slice(0, 120)}{bubble.displayedText.length > 120 ? "…" : ""}
                   {isTyping && (
                     <span style={{ animation: "blink 0.7s step-end infinite" }}>▌</span>
                   )}
