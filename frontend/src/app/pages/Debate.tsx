@@ -82,6 +82,7 @@ export function Debate() {
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seenMessageIds = useRef<Set<string>>(new Set((initialSnapshot?.messages ?? []).map((m) => m.id)));
   const hasRedirected = useRef(false);
+  const hasVisibleConversation = visibleMessages.some((message) => message.role !== "system");
 
   useEffect(() => {
     if ((!question || !sessionId) && !hasRedirected.current) {
@@ -122,7 +123,7 @@ export function Debate() {
     if (snapshot.status === "complete") return;
     if (snapshot.current_round >= snapshot.round_goal) return;
 
-    const delay = visibleMessages.length === 0 ? 500 : 1500;
+    const delay = hasVisibleConversation ? 1500 : 500;
     const timer = setTimeout(async () => {
       if (isPausedRef.current) return;
       setIsAdvancing(true);
@@ -139,7 +140,7 @@ export function Debate() {
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [snapshot?.current_round, isAdvancing, isPaused, sessionId]);
+  }, [hasVisibleConversation, snapshot?.current_round, isAdvancing, isPaused, sessionId]);
 
   const handleTogglePause = () => {
     isPausedRef.current = !isPausedRef.current;

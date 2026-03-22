@@ -25,7 +25,7 @@ from ..models import (
     UserReasoningProfile,
 )
 from ..repository import AppRepository, message_from_entity, persona_from_entity
-from ..services.panel import extract_decision_frame, stance_label
+from ..services.panel import estimate_initial_stance, extract_decision_frame, stance_label
 from .prompts import (
     ROUND_CUES,
     build_brief_prompt,
@@ -361,6 +361,31 @@ class SimulationService:
     def _should_use_local_stub_runtime(self) -> bool:
         return self.settings.normalized_provider == "stub" and OasisDeliberationRuntime is None
 
+    def _seed_initial_stances(
+        self,
+        *,
+        simulation_id: str,
+        simulation,
+        decision: str,
+        document_context: str,
+    ) -> None:
+        decision_context = (
+            f"{decision}\n\nSupporting documents:\n{document_context}"
+            if document_context
+            else decision
+        )
+        for participant in simulation.participants:
+            persona = persona_from_entity(participant.persona)
+            initial = estimate_initial_stance(persona, decision_context)
+            self.repository.set_participant_state(
+                simulation_id=simulation_id,
+                persona_id=participant.persona_id,
+                stance=initial.stance,
+                confidence=initial.confidence,
+                rationale=initial.rationale,
+                round_index=0,
+            )
+
     async def _create_stub_session(
         self,
         *,
@@ -383,25 +408,12 @@ class SimulationService:
             content=opening_text,
         )
 
-        client = StructuredLLMClient(self.provider_factory.create_agent_backend())
-        for participant in simulation.participants:
-            persona = persona_from_entity(participant.persona)
-            payload = await client.generate_json(
-                system_prompt=self._persona_system_prompt(persona, request.decision, document_context),
-                user_prompt=build_initial_stance_prompt(
-                    decision=request.decision,
-                    document_context=document_context,
-                ),
-                schema=StanceInterviewPayload,
-            )
-            self.repository.set_participant_state(
-                simulation_id=simulation_id,
-                persona_id=participant.persona_id,
-                stance=payload.stance,
-                confidence=payload.confidence,
-                rationale=payload.rationale,
-                round_index=0,
-            )
+        self._seed_initial_stances(
+            simulation_id=simulation_id,
+            simulation=simulation,
+            decision=request.decision,
+            document_context=document_context,
+        )
 
     async def _create_oasis_session(
         self,
@@ -441,20 +453,12 @@ class SimulationService:
                 content=opening_text,
             )
 
-            for participant in simulation.participants:
-                prompt = build_initial_stance_prompt(decision=request.decision, document_context=document_context)
-                payload = self._parse_agent_payload(
-                    raw_payload=await runtime.interview(agent_id=participant.agent_id, prompt=prompt),
-                    schema=StanceInterviewPayload,
-                )
-                self.repository.set_participant_state(
-                    simulation_id=simulation_id,
-                    persona_id=participant.persona_id,
-                    stance=payload.stance,
-                    confidence=payload.confidence,
-                    rationale=payload.rationale,
-                    round_index=0,
-                )
+            self._seed_initial_stances(
+                simulation_id=simulation_id,
+                simulation=simulation,
+                decision=request.decision,
+                document_context=document_context,
+            )
         finally:
             await runtime.close()
 
