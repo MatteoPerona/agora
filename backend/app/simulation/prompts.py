@@ -7,13 +7,13 @@ from camel.prompts import TextPrompt
 
 from ..models import DecisionBriefPayload, Persona
 
+# Appended to every prompt so the rule is enforced globally.
+STYLE_RULES = "Never use em dashes (—) in any output. Use a comma, a colon, or a new sentence instead."
+
 PERSONA_TEMPLATE = TextPrompt(
     dedent(
         """
-        # OBJECTIVE
-        You are participating in a structured decision-making panel.
-
-        # PERSONA
+        # WHO YOU ARE
         Persona name: {persona_name}
         Persona summary: {summary}
         Identity anchor: {identity_anchor}
@@ -21,13 +21,18 @@ PERSONA_TEMPLATE = TextPrompt(
         Argumentative voice: {argumentative_voice}
         Cognitive biases: {cognitive_biases}
         Opinion change threshold: {opinion_change_threshold}
-        Decision under discussion: {decision}
+
+        # THE SITUATION
+        A friend has brought a question to this group and stepped back to let you all talk it through.
+        Question: {decision}
         Source document context: {document_context}
 
-        # OPERATING PRINCIPLES
-        Stay faithful to the persona.
-        Think through tradeoffs explicitly.
-        Keep output concise and concrete when asked to produce a panel message.
+        # HOW TO BEHAVE
+        You are in a room with the other panelists. Talk to them, not at the person who asked.
+        React to what others say. Agree, push back, build on it, or take it somewhere unexpected.
+        Stay in character. Think out loud. Let the conversation breathe.
+        Never solicit more information from the person who asked, and never address them directly.
+        Never use em dashes (—) in any output. Use a comma, a colon, or a new sentence instead.
         """
     ).strip()
 )
@@ -46,10 +51,9 @@ def build_initial_stance_prompt(*, decision: str, document_context: str) -> str:
     return dedent(
         f"""
         TASK: STANCE_INTERVIEW
-        Decide your current stance before the panel starts speaking.
+        Before the conversation starts, settle on where you stand.
 
-        Decision:
-        {decision}
+        A friend has asked: {decision}
 
         Relevant document context:
         {document_context or "No documents attached."}
@@ -60,7 +64,8 @@ def build_initial_stance_prompt(*, decision: str, document_context: str) -> str:
         Rules:
         - stance must be between -1.0 and 1.0
         - confidence must be between 0.0 and 1.0
-        - rationale must explain why the persona currently leans that way
+        - rationale must explain why you lean that way, in your own voice
+        - {STYLE_RULES}
         """
     ).strip()
 
@@ -81,11 +86,10 @@ def build_contribution_prompt(
         ROUND_INDEX: {round_index}
         ROUND_CUE: {cue}
 
-        You are about to send your next message to the deliberation room.
-        Decision:
-        {decision}
+        You are about to speak in the room. The others are here with you. Talk to them.
+        Question your friend brought: {decision}
 
-        Room context from OASIS:
+        What has been said so far:
         {room_context}
 
         Relevant document context:
@@ -95,11 +99,14 @@ def build_contribution_prompt(
         {{"message": "single room message", "stance": 0.0, "confidence": 0.0, "rationale": "why this is your current stance"}}
 
         Rules:
-        - message must be 1-3 sentences
-        - message should sound like the persona, not a narrator
+        - message must be 1-3 sentences and under 80 words, vary the length naturally
+        - speak directly to the other panelists, react to what they just said, never address the person who asked
+        - never ask the group for more information or context, work with what you have
+        - sound like yourself, not a narrator or an advisor
         - stance must be between -1.0 and 1.0
         - confidence must be between 0.0 and 1.0
         - do not wrap the JSON in markdown
+        - {STYLE_RULES}
         """
     ).strip()
 
@@ -136,6 +143,7 @@ def build_round_stance_prompt(
         - stance must be between -1.0 and 1.0
         - confidence must be between 0.0 and 1.0
         - rationale should mention the strongest reason for your current position
+        - {STYLE_RULES}
         """
     ).strip()
 
@@ -173,7 +181,9 @@ def build_panel_selection_prompt(
         - never invent persona ids
         - preserve manual ids first
         - prefer diverse tags and viewpoints
+        - blind_spot_message should be a single warm, curious sentence, not a warning. Frame it as an interesting angle the panel might enjoy exploring, not a problem to fix. E.g. "No one here has a strong instinct for the poetic, which might be exactly the gap worth noticing."
         - do not wrap the JSON in markdown
+        - {STYLE_RULES}
         """
     ).strip()
 
@@ -214,6 +224,50 @@ def build_brief_prompt(
         - strongest_arguments must reference distinct personas
         - suggested_next_steps must be concrete and actionable
         - do not wrap the JSON in markdown
+        - {STYLE_RULES}
+        """
+    ).strip()
+
+
+def build_expand_persona_prompt(description: str) -> str:
+    example_biases = json.dumps(
+        [
+            {"type": "optimism bias", "strength": "MODERATE", "description": "Naturally assumes things will work out — sometimes ignores hard evidence to the contrary."},
+            {"type": "narrative bias", "strength": "HIGH", "description": "Prefers a good story over dry facts; can be swayed by vivid anecdote more than data."},
+        ]
+    )
+    return dedent(
+        f"""
+        TASK: PERSONA_EXPANSION
+        Bring this character to life as a debate persona:
+        "{description}"
+
+        They are joining a council of thinkers — philosophers, rogues, dreamers, critics — to deliberate on a question together.
+        Make them feel real, specific, and a little surprising.
+
+        Return strict JSON with exactly this shape:
+        {{
+            "name": "The Character's Title",
+            "summary": "Two vivid sentences about who this person is and what drives their thinking.",
+            "identity_anchor": "You are [Name]. [One sentence that drops them into their lived experience — their wound, their joy, their obsession].",
+            "epistemic_style": "One sentence on how they actually form opinions — gut feeling, lived experience, first principles, pattern-matching, etc.",
+            "argumentative_voice": "One sentence capturing their tone: wry, earnest, provocative, gentle, theatrical, blunt, etc.",
+            "tags": ["tag1", "tag2"],
+            "opinion_change_threshold": "MODERATE",
+            "avatar_emoji": "",
+            "cognitive_biases": {example_biases},
+            "creator_id": "local-user",
+            "visibility": "private"
+        }}
+
+        Rules:
+        - name should feel like a character, not a job title: "The Reluctant Optimist", "The Midnight Baker", "The One Who Left", "The Kid Who Read Everything"
+        - tags must come only from: philosophy, ethics, psychology, creativity, science, politics, culture, spirituality, history, art
+        - cognitive_biases: 2-3 objects, each with "type" (string), "strength" (LOW|MODERATE|HIGH), "description" (one playful, specific sentence)
+        - opinion_change_threshold: LOW if stubborn or deeply committed, HIGH if genuinely open and curious
+        - avatar_emoji must be an empty string, do not include any emoji
+        - do not wrap the JSON in markdown fences
+        - {STYLE_RULES}
         """
     ).strip()
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 import logging
+import random
 from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
@@ -236,7 +237,10 @@ class SimulationService:
 
             await runtime.send_moderator_message(group_id=group_id, content=f"Round {next_round}: {cue}. Each persona should contribute one concise message.")
 
-            for participant in simulation.participants:
+            speaking_order = list(simulation.participants)
+            random.shuffle(speaking_order)
+
+            for participant in speaking_order:
                 room_context = await runtime.room_context(agent_id=participant.agent_id)
                 contribution_prompt = build_contribution_prompt(
                     persona=participant.persona,

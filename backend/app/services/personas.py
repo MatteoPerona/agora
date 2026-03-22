@@ -6,15 +6,16 @@ import unicodedata
 from ..models import BiasConfig, CreatePersonaRequest
 
 KEYWORD_TAGS = {
-    "operations": ["operations", "operator", "process", "workflow", "delivery", "burned"],
-    "psychology": ["behavior", "psychology", "incentive", "habit", "adoption"],
-    "people": ["people", "culture", "hr", "manager", "team", "trust"],
-    "finance": ["finance", "investor", "fund", "runway", "venture", "series"],
-    "engineering": ["engineer", "technical", "system", "architecture", "code", "security"],
-    "risk": ["risk", "compliance", "security", "legal", "unsafe"],
-    "growth": ["growth", "marketing", "brand", "distribution", "awareness"],
-    "product": ["product", "pm", "ship", "launch", "feature", "customer"],
-    "founder": ["founder", "startup", "vision", "builder", "bootstrap"],
+    "philosophy": ["philosophy", "philosopher", "ethics", "virtue", "wisdom", "meaning", "truth"],
+    "psychology": ["psychology", "behavior", "mind", "feeling", "emotion", "habit", "trauma", "joy"],
+    "creativity": ["artist", "creative", "writer", "maker", "design", "imagine", "story", "dream"],
+    "science": ["science", "scientist", "evidence", "data", "experiment", "research", "logic"],
+    "politics": ["politics", "power", "justice", "society", "democracy", "rights", "activist"],
+    "culture": ["culture", "anthropology", "tradition", "community", "ritual", "identity", "belong"],
+    "spirituality": ["spiritual", "faith", "religion", "mystic", "contemplative", "monk", "prayer"],
+    "history": ["history", "historian", "ancient", "past", "archive", "memory", "century"],
+    "art": ["art", "poet", "musician", "painter", "sculptor", "theatre", "performer"],
+    "ethics": ["moral", "ethics", "right", "wrong", "ought", "duty", "care", "harm"],
 }
 
 
@@ -32,40 +33,39 @@ def expand_natural_language_persona(description: str) -> CreatePersonaRequest:
         if any(trigger in lowered for trigger in triggers)
     ]
     if not tags:
-        tags = ["strategy", "analysis"]
+        tags = ["philosophy", "culture"]
 
     name = _derive_name(description)
     summary = _derive_summary(description)
     threshold = _infer_threshold(lowered)
-    avatar = _infer_avatar(tags)
 
     biases = [
         BiasConfig(
-            type="confirmation bias",
-            strength="MODERATE" if "skeptic" not in lowered else "HIGH",
-            description="You instinctively favor evidence that validates your frame.",
-        ),
-        BiasConfig(
-            type="commitment bias",
-            strength="HIGH" if threshold == "HIGH" else "MODERATE",
-            description="Once you state a position, changing it feels expensive.",
-        ),
-        BiasConfig(
-            type="availability bias",
+            type="narrative bias",
             strength="MODERATE",
-            description="Recent examples and vivid stories shape your judgment.",
+            description="A compelling story moves them more than a careful argument ever will.",
+        ),
+        BiasConfig(
+            type="lived-experience bias",
+            strength="HIGH" if threshold == "HIGH" else "MODERATE",
+            description="They trust what they've personally felt or seen over what they've only read.",
+        ),
+        BiasConfig(
+            type="optimism bias",
+            strength="MODERATE",
+            description="Even when being critical, there's a flicker of hope they can't quite extinguish.",
         ),
     ]
 
     return CreatePersonaRequest(
         name=name,
         summary=summary,
-        identity_anchor=f"You are {name}, a decision-maker shaped by the lived experience described here: {description.strip()}",
+        identity_anchor=f"You are {name}. You carry the world described here inside you: {description.strip()}",
         epistemic_style=_derive_style(description, tags),
         argumentative_voice=_derive_voice(description, tags),
         tags=tags,
         opinion_change_threshold=threshold,
-        avatar_emoji=avatar,
+        avatar_emoji="",
         cognitive_biases=biases,
     )
 
@@ -75,7 +75,7 @@ def _derive_name(description: str) -> str:
     if match:
         phrase = " ".join(word.capitalize() for word in match.group(1).split()[:4])
         return f"The {phrase}"
-    return "The New Perspective"
+    return "The New Voice"
 
 
 def _derive_summary(description: str) -> str:
@@ -86,45 +86,36 @@ def _derive_summary(description: str) -> str:
 
 
 def _derive_style(description: str, tags: list[str]) -> str:
-    if "finance" in tags:
-        return "You convert qualitative claims into economic tradeoffs, downside exposure, and return shape."
-    if "operations" in tags:
-        return "You look for coordination load, execution drag, and whether the team can absorb the move."
+    if "philosophy" in tags:
+        return "You chase the question underneath the question — the assumption everyone else walked past."
+    if "creativity" in tags:
+        return "You think in images and metaphors, finding the angle no one was looking at."
+    if "science" in tags:
+        return "You want to know what would change your mind, and you ask that of everyone else too."
     if "psychology" in tags:
-        return "You focus on incentives, defaults, and the gap between what people say and what they actually do."
-    if "engineering" in tags:
-        return "You reduce the debate to constraints, interfaces, and the assumptions that can be tested quickly."
-    return "You search for the hidden frame underneath the obvious argument and explain your reasoning clearly."
+        return "You're always listening for what's not being said — the feeling underneath the argument."
+    if "history" in tags:
+        return "You reach for the long view, finding precedents and patterns that repeat across centuries."
+    if "spirituality" in tags:
+        return "You look for what endures when everything external is stripped away."
+    return "You search for the real thing underneath the surface argument and follow it wherever it leads."
 
 
 def _derive_voice(description: str, tags: list[str]) -> str:
     if "cynical" in description.lower() or "skeptic" in description.lower():
-        return "Skeptical, concise, and unsentimental. You poke at the weakest assumption first."
-    if "operations" in tags:
-        return "Grounded and practical. You sound like someone who has had to carry the plan after the meeting ended."
+        return "Dry, a little mischievous, fond of the question that makes everyone pause."
+    if "creativity" in tags or "art" in tags:
+        return "Playful and associative — you'll take a surprising detour to arrive at something true."
+    if "spirituality" in tags:
+        return "Calm and unhurried. You speak like you're not in a rush to be right."
     if "psychology" in tags:
-        return "Curious and pattern-aware. You reframe behavior before offering advice."
-    return "Distinct, clear, and willing to disagree without hedging."
+        return "Warm and perceptive. You reflect things back to people in ways they didn't expect."
+    return "Curious, direct, and a little unpredictable — you say the thing others were circling around."
 
 
 def _infer_threshold(lowered: str) -> str:
-    if any(word in lowered for word in ["stubborn", "scarred", "burned", "cynical"]):
+    if any(word in lowered for word in ["stubborn", "scarred", "burned", "cynical", "committed", "devout"]):
         return "HIGH"
-    if any(word in lowered for word in ["curious", "adaptive", "experimental"]):
+    if any(word in lowered for word in ["curious", "open", "wandering", "searching", "questioning"]):
         return "LOW"
     return "MODERATE"
-
-
-def _infer_avatar(tags: list[str]) -> str:
-    if "finance" in tags:
-        return "💼"
-    if "operations" in tags:
-        return "🧰"
-    if "psychology" in tags:
-        return "🧭"
-    if "engineering" in tags:
-        return "🛠️"
-    if "people" in tags:
-        return "🌱"
-    return "🪞"
-

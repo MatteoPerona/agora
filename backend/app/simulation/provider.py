@@ -70,7 +70,7 @@ class StructuredLLMClient:
     async def generate_json(self, *, system_prompt: str, user_prompt: str, schema: type[T]) -> T:
         result = await self.backend.arun(
             [
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system_prompt + "\n\nNever use em dashes (—) in any output. Use a comma, a colon, or a new sentence instead."},
                 {"role": "user", "content": user_prompt},
             ]
         )

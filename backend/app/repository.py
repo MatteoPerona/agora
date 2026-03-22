@@ -147,6 +147,16 @@ class AppRepository:
         self.session.flush()
         return persona_from_entity(record)
 
+    def update_persona(self, persona_id: str, updates: dict) -> Persona | None:
+        record = self.session.get(PersonaEntity, persona_id)
+        if record is None:
+            return None
+        for key, value in updates.items():
+            if value is not None and hasattr(record, key):
+                setattr(record, key, value)
+        self.session.flush()
+        return persona_from_entity(record)
+
     def increment_persona_usage(self, persona_ids: list[str]) -> None:
         for record in self.get_persona_entities(persona_ids):
             record.times_used += 1
@@ -217,6 +227,14 @@ class AppRepository:
             if entity is not None
         ]
         return [stored_document_from_entity(entity) for entity in entities]
+
+    def delete_persona(self, persona_id: str) -> Persona | None:
+        record = self.session.get(PersonaEntity, persona_id)
+        if record is None:
+            return None
+        payload = persona_from_entity(record)
+        self.session.delete(record)
+        return payload
 
     def delete_document(self, document_id: str) -> UploadedDocument | None:
         record = self.get_document_entity(document_id)

@@ -107,6 +107,14 @@ class CreatePersonaRequest(BaseModel):
     cognitive_biases: list[BiasConfig]
 
 
+class UpdatePersonaRequest(BaseModel):
+    summary: str | None = None
+    identity_anchor: str | None = None
+    epistemic_style: str | None = None
+    argumentative_voice: str | None = None
+    opinion_change_threshold: Literal["LOW", "MODERATE", "HIGH"] | None = None
+
+
 class RecommendPanelRequest(BaseModel):
     decision: str = Field(min_length=20)
     panel_size: int = Field(default=5, ge=3, le=8)

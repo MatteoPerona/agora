@@ -1,85 +1,110 @@
-# Perspective Engine
+# The Agora
 
-A first local MVP of the proposal in `/Users/matteoperona/Downloads/perspective_engine_proposal.md`.
+**Summon anyone to debate anything.**
+
+Ask any question — trivial or profound — and watch a council of great minds deliberate. The Agora runs a multi-agent simulation where each persona is an independent LLM agent that forms opinions, takes stances, and argues from its own perspective. You get real stance tracking, round-by-round trajectory charts, and a synthesized verdict at the end.
+
+![Agora screenshot](docs/screenshot.png)
+
+## What it does
+
+1. **Frame your question** — type anything from "should I quit my job?" to "is democracy just mob rule with better branding?"
+2. **Select your council** — pick from a library of pre-built philosopher personas (Socrates, Diogenes, Aristotle, Seneca, Marcus Aurelius, Epicurus...) or describe any person, character, or archetype and the AI will expand it into a full debate persona. Or don't use AI and add them directly.
+3. **Watch the debate** — personas take turns speaking in a live chat view, or switch to the **Arena** view to watch pixel-art sprites stand on terrain and deliver speeches with typewriter-style speech bubbles.
+4. **Read the verdict** — a structured decision brief with a headline, stance summary, each voice's final position, and an opinion-over-time sparkline per persona.
 
 ## Stack
 
-- Frontend: React + TypeScript + Vite
-- Backend: FastAPI + SQLAlchemy + Alembic
-- Simulation runtime: CAMEL-AI OASIS
-- Data: SQLite app DB, per-simulation OASIS trace DBs, seeded persona library, seeded reasoning profile
+- **Frontend:** React + TypeScript + Vite + Tailwind 4, brutalist design system
+- **Backend:** FastAPI + SQLAlchemy + Alembic, SQLite
+- **Simulation runtime:** [CAMEL-AI OASIS](https://github.com/camel-ai/oasis) multi-agent framework
+- **LLM providers:** Anthropic (Claude), OpenAI-compatible endpoints, or a local stub for development
 
 ## Run locally
 
-1. Create a Python 3.11 environment and install backend dependencies:
+### 1. Backend
 
 ```bash
+# Create Python 3.11 environment
 uv venv --python python3.11 .venv
 source .venv/bin/activate
 uv pip install -r backend/requirements.txt
 ```
 
-2. Configure the simulation provider.
-
-For a local smoke test with deterministic stub responses:
+Create a `.env` file in the repo root:
 
 ```bash
-export SIM_PROVIDER=stub
-export SIM_MODEL=stub
+# Use the stub provider for local dev (no API key needed)
+SIM_PROVIDER=stub
+SIM_MODEL=stub
+
+# Or use Anthropic
+# SIM_PROVIDER=anthropic
+# SIM_MODEL=claude-haiku-4-5-20251001
+# SIM_API_KEY=sk-ant-...
+
+# Or any OpenAI-compatible endpoint (Ollama, Together, etc.)
+# SIM_PROVIDER=openai-compatible-model
+# SIM_MODEL=llama3
+# SIM_API_KEY=...
+# SIM_BASE_URL=http://localhost:11434/v1
 ```
 
-For a real OASIS-backed run against an OpenAI-compatible endpoint:
+Start the server:
 
 ```bash
-export SIM_PROVIDER=openai-compatible-model
-export SIM_MODEL=your_model_name
-export SIM_API_KEY=your_key_here
-export SIM_BASE_URL=https://your-endpoint.example/v1
-```
-
-For Anthropic-backed runs:
-
-```bash
-export SIM_PROVIDER=anthropic
-export SIM_MODEL=claude-3-5-sonnet-latest
-export SIM_API_KEY=your_key_here
-```
-
-Optional overrides for separate planner/brief models:
-
-```bash
-export SIM_SELECTOR_MODEL=your_selector_model
-export SIM_SUMMARY_MODEL=your_summary_model
-export SIM_MAX_CONCURRENCY=8
-```
-
-3. Start the backend:
-
-```bash
-source .venv/bin/activate
 uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-4. Start the frontend in a second terminal:
+### 2. Frontend
 
 ```bash
-cd frontend
+cd "Agora Debate Design System"
 npm install
 npm run dev
 ```
 
-5. Open the Vite URL, usually `http://127.0.0.1:5173`.
+Open `http://localhost:5173`.
 
-## What this backend now includes
+## API overview
 
-- Route-based 3-screen flow for compose, persona selection, and simulation
-- Real document upload for `.txt`, `.md`, and `.pdf`
-- Provider-backed panel recommendation with deterministic fallback
-- OASIS-backed panel simulation with persisted rounds, events, and per-run trace databases
-- Structured stance interviews and trajectory tracking per round
-- Expandable and downloadable decision brief
-- Additive SSE event endpoint at `/api/sessions/{id}/events`
+| Endpoint | Description |
+|---|---|
+| `GET /api/personas` | List all available personas |
+| `POST /api/personas/expand` | Expand natural language → full Persona via LLM |
+| `POST /api/personas` | Create custom persona directly |
+| `POST /api/documents` | Upload context document (.txt / .md / .pdf) |
+| `POST /api/panel/recommend` | AI-recommended panel for a decision |
+| `POST /api/sessions` | Start a new debate session |
+| `GET /api/sessions/{id}` | Get current session snapshot |
+| `POST /api/sessions/{id}/advance` | Run the next debate round |
+| `POST /api/sessions/{id}/interjections` | Inject a user message mid-debate |
+| `POST /api/sessions/{id}/finish` | End debate and generate verdict |
+| `GET /api/sessions/{id}/events` | SSE stream of session events |
 
-## Backend Docs
+## Project structure
 
-For a detailed architecture walkthrough of the backend, including data flow, OASIS integration, persistence, API contracts, frontend coupling, and Mermaid diagrams, see [backend/README.md](/Users/matteoperona/Projects/agora/backend/README.md).
+```
+agora/
+├── backend/
+│   └── app/
+│       ├── main.py           # All API routes
+│       ├── models.py         # Pydantic request/response models
+│       ├── entities.py       # SQLAlchemy ORM tables
+│       ├── repository.py     # Data access layer
+│       ├── services/         # Panel selection, persona expansion, documents
+│       └── simulation/       # OASIS runtime, LLM provider abstraction, prompts
+└── Agora Debate Design System/
+    └── src/app/
+        ├── pages/            # Home, SummonCouncil, Debate, Verdict
+        ├── components/       # BrutalistButton, BrutalistCard, DebateArena, DesktopPet
+        └── data/             # philosophers.ts (static persona definitions)
+```
+
+## Development tips
+
+- Use `SIM_PROVIDER=stub` during UI work — no LLM calls, instant responses, zero cost.
+- The Arena view uses pixel-art sprites from `public/pixelart/`. Each philosopher folder contains directional sprites (`rotations/south.png`, `east.png`, `west.png`).
+- The frontend proxies API calls to `http://localhost:8000` via Vite config.
+- Run backend tests: `pytest backend/tests -q`
+- Type-check frontend: `npx tsc --noEmit` (from the `Agora Debate Design System/` directory)

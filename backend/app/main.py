@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from .models import (
     PanelRecommendationResponse,
     RecommendPanelRequest,
     SessionSnapshot,
+    UpdatePersonaRequest,
     UploadedDocument,
     UserInterjectionRequest,
 )
@@ -28,6 +30,8 @@ from .session_lock import session_lock
 from .services.documents import build_document_context, ingest_upload, select_relevant_document_chunks
 from .services.personas import expand_natural_language_persona, slugify
 from .services.selection import select_panel
+from .simulation.prompts import build_expand_persona_prompt
+from .simulation.provider import SimulationProviderFactory, StructuredLLMClient
 from .simulation.service import SimulationService
 
 logger = logging.getLogger(__name__)
@@ -50,7 +54,12 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Perspective Engine API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5174",
+        "http://localhost:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -108,8 +117,76 @@ def remove_document(document_id: str, repository: AppRepository = Depends(get_re
     return document
 
 
+_RANDOM_SEEDS = [
+    "A retired lighthouse keeper who spent 20 years talking only to seagulls and now has very strong opinions about solitude",
+    "A competitive crossword puzzle champion who sees every problem as a grid waiting to be filled",
+    "A former child prodigy who burned out at 16 and has spent the last decade unlearning everything",
+    "A hospice nurse who has sat with hundreds of people in their final hours and is no longer afraid of any question",
+    "A deep-sea diver who found something unexplainable 400 metres down and hasn't spoken about it until now",
+    "A person who grew up in a travelling circus and believes everything in life is either a performance or an audience",
+    "An insomniac philosopher who does their best thinking at 3am and mistrusts anyone who sleeps soundly",
+    "A professional beekeeper who models all human behaviour on the logic of the hive",
+    "A failed stand-up comedian who became a moral philosopher after a particularly brutal open-mic night",
+    "A grandmother who survived three revolutions and still tends her garden every morning without fail",
+    "A cartographer who maps things that don't exist yet and believes imagination is the most rigorous discipline",
+    "A child psychologist who secretly thinks adults are far more confused than children",
+    "A sommelier who applies the same precision to evaluating ideas as they do to wine",
+    "A wilderness survival instructor who believes comfort is the enemy of clarity",
+    "A translator who has worked in 11 languages and thinks meaning is always lost and that's beautiful",
+    "A medieval historian who is convinced nothing about human nature has changed in 800 years",
+    "A night-shift baker who thinks the world looks completely different at 4am and everyone else is missing it",
+    "An astronomer who has spent 30 years staring at things too far away to touch and finds this comforting",
+    "A reformed fraudster who now consults on trust and authenticity with an impeccable poker face",
+    "A botanist who believes plants solve problems humans haven't even thought to ask yet",
+]
+
+
+@app.post("/api/personas/random")
+async def random_persona(settings: Settings = Depends(get_settings)) -> dict:
+    seed = random.choice(_RANDOM_SEEDS)
+    if settings.normalized_provider != "stub":
+        try:
+            factory = SimulationProviderFactory(settings)
+            client = StructuredLLMClient(factory.create_selector_backend())
+            result = await client.generate_json(
+                system_prompt="You create detailed, richly characterful debate personas for a philosophical deliberation council.",
+                user_prompt=build_expand_persona_prompt(seed),
+                schema=CreatePersonaRequest,
+            )
+            return {**result.model_dump(), "seed_description": seed}
+        except Exception as exc:
+            logger.warning("LLM random persona expansion failed (%s); falling back to heuristic.", exc)
+    payload = expand_natural_language_persona(seed)
+    return {**payload.model_dump(), "seed_description": seed}
+
+
+@app.delete("/api/personas/{persona_id}")
+def remove_persona(persona_id: str, repository: AppRepository = Depends(get_repository)) -> dict:
+    persona = repository.delete_persona(persona_id)
+    if persona is None:
+        raise HTTPException(status_code=404, detail="Persona not found.")
+    repository.session.commit()
+    return persona.model_dump()
+
+
 @app.post("/api/personas/expand")
-def expand_persona(request: ExpandPersonaRequest) -> dict:
+async def expand_persona(
+    request: ExpandPersonaRequest,
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    # Use the real LLM when a provider is configured; otherwise use the fast heuristic fallback.
+    if settings.normalized_provider != "stub":
+        try:
+            factory = SimulationProviderFactory(settings)
+            client = StructuredLLMClient(factory.create_selector_backend())
+            result = await client.generate_json(
+                system_prompt="You create detailed, realistic debate personas for structured deliberation simulations.",
+                user_prompt=build_expand_persona_prompt(request.description),
+                schema=CreatePersonaRequest,
+            )
+            return result.model_dump()
+        except Exception as exc:
+            logger.warning("LLM persona expansion failed (%s); falling back to heuristic.", exc)
     payload = expand_natural_language_persona(request.description)
     return payload.model_dump()
 
@@ -123,6 +200,19 @@ def new_persona(request: CreatePersonaRequest, repository: AppRepository = Depen
     persona = repository.create_persona(request, persona_id)
     repository.session.commit()
     return persona.model_dump()
+
+
+@app.patch("/api/personas/{persona_id}")
+def update_persona(
+    persona_id: str,
+    request: UpdatePersonaRequest,
+    repository: AppRepository = Depends(get_repository),
+) -> dict:
+    updated = repository.update_persona(persona_id, request.model_dump(exclude_none=True))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Persona not found.")
+    repository.session.commit()
+    return updated.model_dump()
 
 
 @app.post("/api/panel/recommend", response_model=PanelRecommendationResponse)
